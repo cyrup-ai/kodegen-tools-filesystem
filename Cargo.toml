@@ -1,0 +1,124 @@
+[package]
+name = "kodegen_tools_filesystem"
+version = "0.1.0"
+edition = "2024"
+description = "KODEGEN.ᴀɪ: Memory-efficient, Blazing-Fast, MCP tools for code generation agents."
+authors = ["KODEGEN.ᴀɪ"]
+homepage = "https://kodegen.ai"
+repository = "https://github.com/cyrup-ai/kodegen-tools-filesystem"
+readme = "README.md"
+categories = ["development-tools", "command-line-utilities", "api-bindings"]
+keywords = [
+    "mcp",
+    "terminal",
+    "agent",
+    "filesystem",
+    "claude"
+]
+license = "Apache-2.0 OR MIT"
+
+[dependencies]
+kodegen_mcp_schema = { version = "0.1" }
+kodegen_mcp_tool = { version = "0.1" }
+kodegen_tools_config = { version = "0.1" }
+kodegen_utils = { version = "0.1" }
+
+# HTTP server core - for binary
+kodegen_server_http = { version = "0.1" }
+
+# MCP SDK - for Tool implementation
+rmcp = { version = "0.8", features = ["client", "schemars", "server"]}
+
+# Async runtime - for file I/O operations
+tokio = { version = "1", features = ["full"] }
+
+# Serialization - for Args and responses
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Schema generation - for JsonSchema derive
+schemars = "1"
+
+# Error handling - for error conversion
+anyhow = "1"
+
+# Image encoding - CORE for read_file base64 encoding
+base64 = "0.22"
+
+# MIME type detection - CORE for read_file content type
+mime_guess = "2"
+
+# Search functionality - FULL ripgrep implementation
+grep = "0.4"           # Core: regex matching, searcher, JSON printer
+grep-pcre2 = "0.1"   # PCRE2 regex engine (always enabled)
+globset = "0.4"     # Ripgrep's glob matching
+regex = "1"
+bstr = "1"         # Byte string utilities for ripgrep
+
+
+# .gitignore support - CORE for directory walking with proper exclusions
+ignore = "0.4"
+
+# Async streams - for async search result streaming
+futures = "0.3"
+
+# Logging - for debug/error/info in filesystem operations
+log = "0.4"
+env_logger = "0.11"
+
+# Date/time - for timestamps in edit logging
+chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP client - for reading files from URLs
+reqwest = { version = "0.12", features = ["json"] }
+
+# Cross-platform paths - for home directory resolution
+dirs = "6"
+
+# Terminal colors - for formatted output in search tools
+cyrup_termcolor = "2"
+
+# UUID generation - for unique session IDs
+uuid = { version = "1", features = ["serde", "v4"] }
+
+[dev-dependencies]
+tempfile = "3"
+kodegen_mcp_client = { version = "0.1"  }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[features]
+default = []
+
+[lib]
+name = "kodegen_tools_filesystem"
+path = "src/lib.rs"
+
+[[example]]
+name = "filesystem_demo"
+path = "examples/filesystem_demo.rs"
+
+[[example]]
+name = "direct_search_basics"
+path = "examples/direct_search_basics.rs"
+
+[[example]]
+name = "direct_search_patterns"
+path = "examples/direct_search_patterns.rs"
+
+[[example]]
+name = "direct_search_files"
+path = "examples/direct_search_files.rs"
+
+[[example]]
+name = "direct_search_output"
+path = "examples/direct_search_output.rs"
+
+[[example]]
+name = "direct_search_advanced"
+path = "examples/direct_search_advanced.rs"
+
+[[bin]]
+name = "kodegen-filesystem"
+path = "src/main.rs"
