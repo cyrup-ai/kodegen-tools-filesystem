@@ -73,65 +73,53 @@ impl SearchManager {
         // Validate path FIRST (no point generating ID if path invalid)
         let validated_path = validate_path(&options.root_path, &self.config_manager).await?;
 
-        // Create channels BEFORE the loop (reused across collision retries)
+        // Create channels for search cancellation and first-result notification
         let (cancellation_tx, cancellation_rx) = watch::channel(false);
         let (first_result_tx, mut first_result_rx) = watch::channel(false);
 
-        // Generate unique session ID using UUID v4 with collision detection
-        let mut collision_count = 0;
+        // Generate unique session ID - UUID v4 collisions are 1 in 5.3×10³⁶
+        // If collision occurs, indicates RNG failure, not a retryable condition
+        let session_id = Uuid::new_v4().to_string();
 
-        let session_id = loop {
-            let id = Uuid::new_v4().to_string();
+        // Build session object once (no retry loop needed)
+        let session = SearchSession {
+            id: session_id.clone(),
+            cancellation_tx: cancellation_tx.clone(),
+            first_result_tx: first_result_tx.clone(),
+            results: Arc::new(RwLock::new(Vec::new())),
+            is_complete: Arc::new(AtomicBool::new(false)),
+            is_error: Arc::new(RwLock::new(false)),
+            error: Arc::new(RwLock::new(None)),
+            total_matches: Arc::new(AtomicUsize::new(0)),
+            total_files: Arc::new(AtomicUsize::new(0)),
+            last_read_time_atomic: Arc::new(AtomicU64::new(0)),
+            start_time: Instant::now(),
+            was_incomplete: Arc::new(RwLock::new(false)),
+            search_type: options.search_type.clone(),
+            pattern: options.pattern.clone(),
+            timeout_ms: options.timeout_ms,
+            error_count: Arc::new(AtomicUsize::new(0)),
+            errors: Arc::new(RwLock::new(Vec::new())),
+            max_results: effective_max_results,
+            output_mode: options.output_mode,
+            seen_files: Arc::new(RwLock::new(std::collections::HashSet::new())),
+            file_counts: Arc::new(RwLock::new(std::collections::HashMap::new())),
+        };
 
-            // Pre-build session object BEFORE lock (fast, no I/O)
-            let session = SearchSession {
-                id: id.clone(),
-                cancellation_tx: cancellation_tx.clone(),
-                first_result_tx: first_result_tx.clone(),
-                results: Arc::new(RwLock::new(Vec::new())),
-                is_complete: Arc::new(AtomicBool::new(false)),
-                is_error: Arc::new(RwLock::new(false)),
-                error: Arc::new(RwLock::new(None)),
-                total_matches: Arc::new(AtomicUsize::new(0)),
-                total_files: Arc::new(AtomicUsize::new(0)),
-                last_read_time_atomic: Arc::new(AtomicU64::new(0)),
-                start_time: Instant::now(),
-                was_incomplete: Arc::new(RwLock::new(false)),
-                search_type: options.search_type.clone(),
-                pattern: options.pattern.clone(),
-                timeout_ms: options.timeout_ms,
-                error_count: Arc::new(AtomicUsize::new(0)),
-                errors: Arc::new(RwLock::new(Vec::new())),
-                max_results: effective_max_results,
-                output_mode: options.output_mode,
-                seen_files: Arc::new(RwLock::new(std::collections::HashSet::new())),
-                file_counts: Arc::new(RwLock::new(std::collections::HashMap::new())),
-            };
-
-            // Atomic check-and-insert with WRITE lock
+        // Insert session (collision check not needed for UUID v4)
+        {
             let mut sessions = self.sessions.write().await;
 
-            if !sessions.contains_key(&id) {
-                // ID is unique - insert atomically
-                sessions.insert(id.clone(), session);
-                drop(sessions);
-                break id;
-            }
-
-            // Collision detected (should never happen)
-            drop(sessions);
-            collision_count += 1;
-            log::error!(
-                "UUID v4 collision #{collision_count} detected: {id}. This indicates a serious problem with the RNG!"
+            // Defensive check (debug builds only) - if this fails, RNG is broken
+            debug_assert!(
+                !sessions.contains_key(&session_id),
+                "IMPOSSIBLE: UUID v4 collision detected! RNG may be compromised: {}",
+                session_id
             );
 
-            if collision_count >= 10 {
-                // If we've tried 10 times and all collided, something is seriously wrong
-                return Err(McpError::Other(anyhow::anyhow!(
-                    "Unable to generate unique session ID after 10 attempts. System RNG may be compromised."
-                )));
-            }
-        };
+            sessions.insert(session_id.clone(), session);
+        }
+        // Lock automatically dropped here
 
         // Capture sort options before moving options into spawn_search_task
         let sort_by = options.sort_by;

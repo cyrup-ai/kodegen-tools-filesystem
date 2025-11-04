@@ -283,6 +283,7 @@ impl ParallelVisitor for ContentSearchVisitor {
 
         // Check for cancellation
         if *self.cancellation_rx.borrow() {
+            self.flush_buffer();
             *self.was_incomplete.blocking_write() = true;
             return ignore::WalkState::Quit;
         }
@@ -301,6 +302,7 @@ impl ParallelVisitor for ContentSearchVisitor {
             };
 
             if current_count >= max {
+                self.flush_buffer();
                 return ignore::WalkState::Quit;
             }
         }
@@ -355,6 +357,7 @@ impl ParallelVisitor for ContentSearchVisitor {
                         for (i, result) in results.into_iter().enumerate() {
                             // Check cancellation every 100 results to balance responsiveness vs overhead
                             if i % 100 == 0 && *self.cancellation_rx.borrow() {
+                                self.flush_buffer();
                                 *self.was_incomplete.blocking_write() = true;
                                 return ignore::WalkState::Quit;
                             }
@@ -386,6 +389,7 @@ impl ParallelVisitor for ContentSearchVisitor {
                                         }
                                         Err(_) => {
                                             // Limit reached
+                                            self.flush_buffer();
                                             return ignore::WalkState::Quit;
                                         }
                                     }
@@ -435,6 +439,8 @@ impl ParallelVisitor for ContentSearchVisitor {
                                             }
                                             Err(_) => {
                                                 // Hit limit - quit immediately
+                                                drop(seen);
+                                                self.flush_buffer();
                                                 return ignore::WalkState::Quit;
                                             }
                                         }
@@ -487,6 +493,8 @@ impl ParallelVisitor for ContentSearchVisitor {
                                             }
                                             Err(_) => {
                                                 // Hit file limit - stop search immediately
+                                                drop(counts);
+                                                self.flush_buffer();
                                                 return ignore::WalkState::Quit;
                                             }
                                         }

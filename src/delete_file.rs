@@ -46,10 +46,8 @@ impl Tool for DeleteFileTool {
     async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
 
-        // Check if path exists and is a file
-        let metadata = tokio::fs::metadata(&valid_path).await.map_err(|_| {
-            McpError::ResourceNotFound(format!("File does not exist: {}", args.path))
-        })?;
+        // Check file type (errors propagate naturally)
+        let metadata = tokio::fs::metadata(&valid_path).await?;
 
         if !metadata.is_file() {
             return Err(McpError::InvalidArguments(

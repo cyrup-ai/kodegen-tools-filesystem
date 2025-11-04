@@ -10,7 +10,7 @@ use super::config::{
 };
 use ignore::{DirEntry, ParallelVisitor, ParallelVisitorBuilder};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
 use tokio::sync::{RwLock, watch};
 
@@ -24,6 +24,7 @@ pub(super) struct FileSearchBuilder {
     pub(super) word_boundary: bool,
     pub(super) max_results: usize,
     pub(super) early_termination: bool,
+    pub(super) early_term_triggered: Arc<AtomicBool>,
     pub(super) results: Arc<RwLock<Vec<SearchResult>>>,
     pub(super) total_matches: Arc<AtomicUsize>,
     pub(super) last_read_time_atomic: Arc<AtomicU64>,
@@ -46,6 +47,7 @@ impl<'s> ParallelVisitorBuilder<'s> for FileSearchBuilder {
             word_boundary: self.word_boundary,
             max_results: self.max_results,
             early_termination: self.early_termination,
+            early_term_triggered: Arc::clone(&self.early_term_triggered),
             results: Arc::clone(&self.results),
             total_matches: Arc::clone(&self.total_matches),
             last_read_time_atomic: Arc::clone(&self.last_read_time_atomic),
@@ -72,6 +74,7 @@ pub(super) struct FileSearchVisitor {
     word_boundary: bool,
     max_results: usize,
     early_termination: bool,
+    early_term_triggered: Arc<AtomicBool>,
     results: Arc<RwLock<Vec<SearchResult>>>,
     total_matches: Arc<AtomicUsize>,
     last_read_time_atomic: Arc<AtomicU64>,
@@ -331,12 +334,20 @@ impl ParallelVisitor for FileSearchVisitor {
     fn visit(&mut self, entry: Result<DirEntry, ignore::Error>) -> ignore::WalkState {
         // Check for cancellation
         if *self.cancellation_rx.borrow() {
+            self.flush_buffer();
             *self.was_incomplete.blocking_write() = true;
+            return ignore::WalkState::Quit;
+        }
+
+        // Fast check - if another thread already found exact match, quit immediately
+        if self.early_termination && self.early_term_triggered.load(Ordering::Acquire) {
+            self.flush_buffer();
             return ignore::WalkState::Quit;
         }
 
         // Check if we've reached max results
         if self.total_matches.load(Ordering::SeqCst) >= self.max_results {
+            self.flush_buffer();
             return ignore::WalkState::Quit;
         }
 
@@ -424,11 +435,13 @@ impl ParallelVisitor for FileSearchVisitor {
 
                     // Check for early termination on exact match
                     if self.early_termination && self.is_exact_match(file_name) {
+                        self.flush_buffer();
                         return ignore::WalkState::Quit;
                     }
                 }
                 Err(_) => {
                     // Limit reached - quit searching
+                    self.flush_buffer();
                     return ignore::WalkState::Quit;
                 }
             }
@@ -526,6 +539,7 @@ pub(super) fn execute(
         ),
         max_results,
         early_termination: options.early_termination.unwrap_or(false),
+        early_term_triggered: Arc::new(AtomicBool::new(false)),
         results: Arc::clone(&ctx.results),
         total_matches: Arc::clone(&ctx.total_matches),
         last_read_time_atomic: Arc::clone(&ctx.last_read_time_atomic),

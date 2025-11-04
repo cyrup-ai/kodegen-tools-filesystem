@@ -6,6 +6,30 @@ use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMes
 use serde_json::{Value, json};
 use std::time::SystemTime;
 use tokio::fs;
+use tokio::io::{AsyncBufReadExt, BufReader};
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/// Count lines in a file using streaming with O(1) memory
+///
+/// Uses tokio's BufReader to stream through file line-by-line
+/// without loading entire contents into memory.
+///
+/// Memory usage: ~8KB buffer regardless of file size
+async fn count_lines_streaming(path: &std::path::Path) -> Result<usize, McpError> {
+    let file = tokio::fs::File::open(path).await?;
+    let reader = BufReader::new(file);
+    let mut lines_stream = reader.lines();
+    let mut count = 0;
+
+    while lines_stream.next_line().await?.is_some() {
+        count += 1;
+    }
+
+    Ok(count)
+}
 
 // ============================================================================
 // TOOL STRUCT
@@ -77,16 +101,19 @@ impl Tool for GetFileInfoTool {
             info["readonly"] = json!(stats.permissions().readonly());
         }
 
-        // For text files under 10MB, calculate line count
-        if stats.is_file()
-            && stats.len() < 10 * 1024 * 1024
-            && let Ok(content) = fs::read_to_string(&valid_path).await
-        {
-            let line_count = content.lines().count();
-            info["line_count"] = json!(line_count);
-            if line_count > 0 {
-                info["last_line"] = json!(line_count - 1); // zero-indexed
-                info["append_position"] = json!(line_count); // for appending
+        // For text files under 10MB, calculate line count using streaming
+        if stats.is_file() && stats.len() < 10 * 1024 * 1024 {
+            match count_lines_streaming(&valid_path).await {
+                Ok(line_count) => {
+                    info["line_count"] = json!(line_count);
+                    if line_count > 0 {
+                        info["last_line"] = json!(line_count - 1); // zero-indexed
+                        info["append_position"] = json!(line_count); // for appending
+                    }
+                }
+                Err(_) => {
+                    // Not a text file or encoding error - skip line count silently
+                }
             }
         }
 

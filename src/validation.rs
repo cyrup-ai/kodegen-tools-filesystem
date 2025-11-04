@@ -5,8 +5,20 @@ use tokio::fs;
 use tokio::time::{Duration, timeout};
 
 /// Normalize all paths consistently
+/// On Windows: lowercase for case-insensitive matching
+/// On Unix-like systems: preserve case for case-sensitive matching
 fn normalize_path(p: &str) -> String {
-    expand_home(p).to_lowercase()
+    let expanded = expand_home(p);
+    
+    #[cfg(windows)]
+    {
+        expanded.to_lowercase()
+    }
+    
+    #[cfg(not(windows))]
+    {
+        expanded
+    }
 }
 
 /// Expand home directory (~) in file paths
