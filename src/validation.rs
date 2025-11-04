@@ -20,26 +20,22 @@ fn expand_home(filepath: &str) -> String {
 }
 
 /// Recursively validates parent directories until it finds a valid one
-fn validate_parent_directories(
-    directory_path: &Path,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send + '_>> {
-    Box::pin(async move {
-        if let Some(parent_dir) = directory_path.parent() {
-            // Base case: we've reached the root
-            if parent_dir == directory_path {
-                return false;
-            }
-
-            // Check if the parent directory exists
-            if fs::metadata(parent_dir).await.is_ok() {
-                return true;
-            }
-
-            // Parent doesn't exist, recursively check its parent
-            return validate_parent_directories(parent_dir).await;
+async fn validate_parent_directories(directory_path: &Path) -> bool {
+    // Skip the path itself (index 0), start with parent (index 1)
+    for ancestor in directory_path.ancestors().skip(1) {
+        // Check if we've reached the root (parent == self)
+        if ancestor == ancestor.parent().unwrap_or(ancestor) {
+            return false;
         }
-        false
-    })
+
+        // Check if this ancestor exists
+        if fs::metadata(ancestor).await.is_ok() {
+            return true;
+        }
+    }
+
+    // No valid parent found
+    false
 }
 
 /// Get the list of allowed directories from config
