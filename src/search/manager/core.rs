@@ -70,19 +70,56 @@ impl SearchManager {
 
         log::debug!("Starting search with effective max_results: {effective_max_results}");
 
+        // Validate path FIRST (no point generating ID if path invalid)
+        let validated_path = validate_path(&options.root_path, &self.config_manager).await?;
+
+        // Create channels BEFORE the loop (reused across collision retries)
+        let (cancellation_tx, cancellation_rx) = watch::channel(false);
+        let (first_result_tx, mut first_result_rx) = watch::channel(false);
+
         // Generate unique session ID using UUID v4 with collision detection
         let mut collision_count = 0;
 
         let session_id = loop {
             let id = Uuid::new_v4().to_string();
 
-            let sessions = self.sessions.read().await;
+            // Pre-build session object BEFORE lock (fast, no I/O)
+            let session = SearchSession {
+                id: id.clone(),
+                cancellation_tx: cancellation_tx.clone(),
+                first_result_tx: first_result_tx.clone(),
+                results: Arc::new(RwLock::new(Vec::new())),
+                is_complete: Arc::new(AtomicBool::new(false)),
+                is_error: Arc::new(RwLock::new(false)),
+                error: Arc::new(RwLock::new(None)),
+                total_matches: Arc::new(AtomicUsize::new(0)),
+                total_files: Arc::new(AtomicUsize::new(0)),
+                last_read_time_atomic: Arc::new(AtomicU64::new(0)),
+                start_time: Instant::now(),
+                was_incomplete: Arc::new(RwLock::new(false)),
+                search_type: options.search_type.clone(),
+                pattern: options.pattern.clone(),
+                timeout_ms: options.timeout_ms,
+                error_count: Arc::new(AtomicUsize::new(0)),
+                errors: Arc::new(RwLock::new(Vec::new())),
+                max_results: effective_max_results,
+                output_mode: options.output_mode,
+                seen_files: Arc::new(RwLock::new(std::collections::HashSet::new())),
+                file_counts: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            };
+
+            // Atomic check-and-insert with WRITE lock
+            let mut sessions = self.sessions.write().await;
+
             if !sessions.contains_key(&id) {
+                // ID is unique - insert atomically
+                sessions.insert(id.clone(), session);
                 drop(sessions);
                 break id;
             }
 
-            // This should NEVER happen
+            // Collision detected (should never happen)
+            drop(sessions);
             collision_count += 1;
             log::error!(
                 "UUID v4 collision #{collision_count} detected: {id}. This indicates a serious problem with the RNG!"
@@ -95,46 +132,6 @@ impl SearchManager {
                 )));
             }
         };
-
-        // Validate path
-        let validated_path = validate_path(&options.root_path, &self.config_manager).await?;
-
-        // Create cancellation channel (false = not cancelled initially)
-        let (cancellation_tx, cancellation_rx) = watch::channel(false);
-
-        // Create first-result notification channel
-        let (first_result_tx, mut first_result_rx) = watch::channel(false);
-
-        // Create session
-        let session = SearchSession {
-            id: session_id.clone(),
-            cancellation_tx,
-            first_result_tx,
-            results: Arc::new(RwLock::new(Vec::new())),
-            is_complete: Arc::new(AtomicBool::new(false)),
-            is_error: Arc::new(RwLock::new(false)),
-            error: Arc::new(RwLock::new(None)),
-            total_matches: Arc::new(AtomicUsize::new(0)),
-            total_files: Arc::new(AtomicUsize::new(0)),
-            last_read_time_atomic: Arc::new(AtomicU64::new(0)),
-            start_time: Instant::now(),
-            was_incomplete: Arc::new(RwLock::new(false)),
-            search_type: options.search_type.clone(),
-            pattern: options.pattern.clone(),
-            timeout_ms: options.timeout_ms,
-            error_count: Arc::new(AtomicUsize::new(0)),
-            errors: Arc::new(RwLock::new(Vec::new())),
-            max_results: effective_max_results,
-            output_mode: options.output_mode,
-            seen_files: Arc::new(RwLock::new(std::collections::HashSet::new())),
-            file_counts: Arc::new(RwLock::new(std::collections::HashMap::new())),
-        };
-
-        // Store session
-        self.sessions
-            .write()
-            .await
-            .insert(session_id.clone(), session);
 
         // Capture sort options before moving options into spawn_search_task
         let sort_by = options.sort_by;
