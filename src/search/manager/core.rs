@@ -154,6 +154,10 @@ impl SearchManager {
                     .get(&session_id)
                     .ok_or_else(|| McpError::Other(anyhow::anyhow!("Session lost during wait")))?;
 
+                // Keep session alive during wait - prevents cleanup while legitimately waiting
+                let elapsed_micros = session.start_time.elapsed().as_micros() as u64;
+                session.last_read_time_atomic.store(elapsed_micros, Ordering::Relaxed);
+
                 let is_complete = session.is_complete.load(Ordering::Acquire);
                 let is_error = *session.is_error.read().await;
 

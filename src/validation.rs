@@ -19,21 +19,6 @@ fn expand_home(filepath: &str) -> String {
     filepath.to_string()
 }
 
-/// Recursively validates parent directories until it finds a valid one
-async fn validate_parent_directories(directory_path: &Path) -> bool {
-    // Skip the path itself (index 0), start with parent (index 1)
-    // ancestors() naturally terminates at root - no manual check needed
-    for ancestor in directory_path.ancestors().skip(1) {
-        // Check if this ancestor exists
-        if fs::metadata(ancestor).await.is_ok() {
-            return true;
-        }
-    }
-
-    // No valid parent found
-    false
-}
-
 /// Get the list of allowed directories from config
 fn get_allowed_dirs(config: &kodegen_tools_config::ServerConfig) -> &[String] {
     &config.allowed_directories
@@ -187,13 +172,8 @@ pub async fn validate_path(
                 }
             }
             Err(_) => {
-                // Path doesn't exist - validate parent directories
-                if validate_parent_directories(&absolute).await {
-                    Ok(absolute)
-                } else {
-                    // Return the absolute path anyway for operations that create paths
-                    Ok(absolute)
-                }
+                // Path doesn't exist, return absolute for operations that create paths
+                Ok(absolute)
             }
         }
     };

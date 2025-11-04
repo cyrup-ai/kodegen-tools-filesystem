@@ -2,6 +2,7 @@ use crate::validate_path;
 use kodegen_mcp_schema::filesystem::{ListDirectoryArgs, ListDirectoryPromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
+use log::warn;
 use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use serde_json::{Value, json};
 use tokio::fs;
@@ -60,7 +61,19 @@ impl Tool for ListDirectoryTool {
                 continue;
             }
 
-            let is_dir = entry.file_type().await?.is_dir();
+            // Gracefully handle file_type errors - log and skip problematic entries
+            let is_dir = match entry.file_type().await {
+                Ok(ft) => ft.is_dir(),
+                Err(e) => {
+                    warn!(
+                        "Skipping entry '{}' in '{}': {}",
+                        name,
+                        valid_path.display(),
+                        e
+                    );
+                    continue;
+                }
+            };
 
             if is_dir {
                 items.push(format!("[DIR] {name}"));

@@ -47,11 +47,6 @@ async fn read_lines_forward_with_total(
         }
 
         line_number += 1;
-
-        // Early exit optimization: we have enough lines, skip total count
-        if result.len() == count {
-            return Ok((result, None));
-        }
     }
 
     Ok((result, Some(line_number)))

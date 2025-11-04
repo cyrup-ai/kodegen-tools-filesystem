@@ -447,14 +447,12 @@ impl ParallelVisitor for ContentSearchVisitor {
                                     // DO NOT touch total_matches during search
                                     // (finalization at line 604 will set total_matches = total_files)
 
-                                    // Check if this is a new file (read-only check)
-                                    let is_new_file = {
-                                        let counts = self.file_counts.blocking_read();
-                                        !counts.contains_key(&result.file)
-                                    };
+                                    // ✅ FIX: Acquire write lock FIRST, check and reserve atomically
+                                    let mut counts = self.file_counts.blocking_write();
 
-                                    if is_new_file {
-                                        // New file - atomically reserve a slot in total_files
+                                    // Check if this is a new file (inside write lock)
+                                    if !counts.contains_key(&result.file) {
+                                        // New file - try to reserve a slot in total_files
                                         match self.total_files.fetch_update(
                                             Ordering::SeqCst,
                                             Ordering::SeqCst,
@@ -471,21 +469,19 @@ impl ParallelVisitor for ContentSearchVisitor {
                                             },
                                         ) {
                                             Ok(_) => {
-                                                // Successfully reserved - add to HashMap
-                                                let mut counts = self.file_counts.blocking_write();
-                                                counts
-                                                    .entry(result.file.clone())
-                                                    .and_modify(|data| data.count += 1)
-                                                    .or_insert(
-                                                        super::super::types::FileCountData {
-                                                            count: 1,
-                                                            modified: result.modified,
-                                                            accessed: result.accessed,
-                                                            created: result.created,
-                                                        },
-                                                    );
-                                                let elapsed_micros =
-                                                    self.start_time.elapsed().as_micros() as u64;
+                                                // Successfully reserved - insert new file
+                                                counts.insert(
+                                                    result.file.clone(),
+                                                    super::super::types::FileCountData {
+                                                        count: 1,
+                                                        modified: result.modified,
+                                                        accessed: result.accessed,
+                                                        created: result.created,
+                                                    },
+                                                );
+                                                
+                                                // Update timestamp
+                                                let elapsed_micros = self.start_time.elapsed().as_micros() as u64;
                                                 self.last_read_time_atomic
                                                     .store(elapsed_micros, Ordering::Relaxed);
                                             }
@@ -496,15 +492,16 @@ impl ParallelVisitor for ContentSearchVisitor {
                                         }
                                     } else {
                                         // Existing file - just increment its match count (no limit check needed)
-                                        let mut counts = self.file_counts.blocking_write();
                                         if let Some(data) = counts.get_mut(&result.file) {
                                             data.count += 1;
-                                            let elapsed_micros =
-                                                self.start_time.elapsed().as_micros() as u64;
+                                            
+                                            // Update timestamp
+                                            let elapsed_micros = self.start_time.elapsed().as_micros() as u64;
                                             self.last_read_time_atomic
                                                 .store(elapsed_micros, Ordering::Relaxed);
                                         }
                                     }
+                                    // Write lock released here automatically
                                 }
                             }
                         }

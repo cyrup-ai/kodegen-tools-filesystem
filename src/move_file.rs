@@ -47,14 +47,6 @@ impl Tool for MoveFileTool {
         let source_path = validate_path(&args.source, &self.config_manager).await?;
         let dest_path = validate_path(&args.destination, &self.config_manager).await?;
 
-        // Check if source exists
-        if !tokio::fs::try_exists(&source_path).await.unwrap_or(false) {
-            return Err(McpError::ResourceNotFound(format!(
-                "Source path does not exist: {}",
-                args.source
-            )));
-        }
-
         fs::rename(&source_path, &dest_path).await?;
 
         Ok(json!({
