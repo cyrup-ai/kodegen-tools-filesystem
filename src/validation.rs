@@ -22,12 +22,8 @@ fn expand_home(filepath: &str) -> String {
 /// Recursively validates parent directories until it finds a valid one
 async fn validate_parent_directories(directory_path: &Path) -> bool {
     // Skip the path itself (index 0), start with parent (index 1)
+    // ancestors() naturally terminates at root - no manual check needed
     for ancestor in directory_path.ancestors().skip(1) {
-        // Check if we've reached the root (parent == self)
-        if ancestor == ancestor.parent().unwrap_or(ancestor) {
-            return false;
-        }
-
         // Check if this ancestor exists
         if fs::metadata(ancestor).await.is_ok() {
             return true;
