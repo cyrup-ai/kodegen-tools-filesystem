@@ -397,18 +397,78 @@ impl ParallelVisitor for FileSearchVisitor {
         };
 
         if matches {
-            // Atomically reserve a slot before processing
+            // Check for exact match BEFORE reserving slot
+            let is_exact = self.is_exact_match(file_name);
+            
+            if self.early_termination && is_exact {
+                // Try to atomically claim "first exact match" status
+                if self.early_term_triggered
+                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::Acquire)
+                    .is_ok()
+                {
+                    // We're the FIRST thread to find exact match
+                    // Reserve slot and add result
+                    match self
+                        .total_matches
+                        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+                            if current < self.max_results {
+                                Some(current + 1)
+                            } else {
+                                None
+                            }
+                        }) {
+                        Ok(_) => {
+                            // Collect metadata
+                            let entry_metadata = entry.metadata().ok();
+                            let modified = entry_metadata.as_ref().and_then(|m| m.modified().ok());
+                            let accessed = entry_metadata.as_ref().and_then(|m| m.accessed().ok());
+                            let created = entry_metadata.as_ref().and_then(|m| m.created().ok());
+
+                            let search_result = SearchResult {
+                                file: path.display().to_string(),
+                                line: None,
+                                r#match: None,
+                                r#type: SearchResultType::File,
+                                is_context: false,
+                                is_binary: None,
+                                binary_suppressed: None,
+                                modified,
+                                accessed,
+                                created,
+                            };
+
+                            self.add_result(search_result);
+                            self.maybe_update_last_read_time();
+                            
+                            // Flush and quit immediately
+                            self.flush_buffer();
+                            return ignore::WalkState::Quit;
+                        }
+                        Err(_) => {
+                            // Max results reached - quit
+                            self.flush_buffer();
+                            return ignore::WalkState::Quit;
+                        }
+                    }
+                } else {
+                    // Another thread beat us to exact match - just quit
+                    self.flush_buffer();
+                    return ignore::WalkState::Quit;
+                }
+            }
+            
+            // Not exact match or early_termination disabled - normal flow
             match self
                 .total_matches
                 .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
                     if current < self.max_results {
-                        Some(current + 1) // Reserve slot atomically
+                        Some(current + 1)
                     } else {
-                        None // Limit reached
+                        None
                     }
                 }) {
                 Ok(_) => {
-                    // Slot reserved - collect metadata and add result
+                    // Collect metadata and add result (same as before)
                     let entry_metadata = entry.metadata().ok();
                     let modified = entry_metadata.as_ref().and_then(|m| m.modified().ok());
                     let accessed = entry_metadata.as_ref().and_then(|m| m.accessed().ok());
@@ -427,17 +487,8 @@ impl ParallelVisitor for FileSearchVisitor {
                         created,
                     };
 
-                    // Use buffer instead of direct push
                     self.add_result(search_result);
-
-                    // Update last_read_time with throttling
                     self.maybe_update_last_read_time();
-
-                    // Check for early termination on exact match
-                    if self.early_termination && self.is_exact_match(file_name) {
-                        self.flush_buffer();
-                        return ignore::WalkState::Quit;
-                    }
                 }
                 Err(_) => {
                     // Limit reached - quit searching

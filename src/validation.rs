@@ -146,7 +146,8 @@ pub async fn validate_path(
     requested_path: &str,
     config_manager: &kodegen_tools_config::ConfigManager,
 ) -> Result<PathBuf, McpError> {
-    const PATH_VALIDATION_TIMEOUT: u64 = 10000; // 10 seconds
+    // Get timeout from configuration (default: 30 seconds)
+    let timeout_ms = config_manager.get_path_validation_timeout_ms();
 
     let validation_operation = async {
         // Get current config
@@ -190,18 +191,24 @@ pub async fn validate_path(
         }
     };
 
-    // Execute with timeout
+    // Execute with configurable timeout
     if let Ok(result) = timeout(
-        Duration::from_millis(PATH_VALIDATION_TIMEOUT),
+        Duration::from_millis(timeout_ms),
         validation_operation,
     )
     .await
     {
         result
     } else {
-        warn!("Path validation timeout for: {requested_path}");
+        warn!(
+            "Path validation timeout for {} ({}ms)",
+            requested_path, timeout_ms
+        );
         Err(McpError::Other(anyhow::anyhow!(
-            "Path validation timeout after 10 seconds"
+            "Path validation timeout after {}ms. \
+             For slow network filesystems, increase timeout via: \
+             set_config_value({{\"key\": \"path_validation_timeout_ms\", \"value\": 60000}})",
+            timeout_ms
         )))
     }
 }

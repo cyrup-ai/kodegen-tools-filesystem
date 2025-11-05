@@ -10,6 +10,8 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> Result<()> {
     run_http_server("filesystem", |config, _tracker| {
+        let config = config.clone();
+        Box::pin(async move {
         let tool_router = ToolRouter::new();
         let prompt_router = PromptRouter::new();
         let managers = Managers::new();
@@ -118,6 +120,7 @@ async fn main() -> Result<()> {
         search_manager.start_cleanup_task();
 
         Ok(RouterSet::new(tool_router, prompt_router, managers))
+        })
     })
     .await
 }
