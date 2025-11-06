@@ -1,0 +1,112 @@
+//! Execute file search using walker with parallel directory traversal
+
+use super::builder::FileSearchBuilder;
+use crate::search::manager::config::DEFAULT_MAX_RESULTS;
+use crate::search::types::BoundaryMode;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+
+/// Execute file search using walker with parallel directory traversal
+pub(in crate::search::manager) fn execute(
+    options: &crate::search::types::SearchSessionOptions,
+    root: &std::path::PathBuf,
+    ctx: &mut crate::search::manager::context::SearchContext,
+) {
+    use crate::search::rg::flags::hiargs::HiArgs;
+    use crate::search::rg::flags::lowargs::{LowArgs, Mode, PatternSource, SearchMode};
+    use crate::search::manager::utils::{build_type_changes, configure_walker, convert_case_mode};
+    use ignore::WalkBuilder;
+    use std::sync::atomic::Ordering;
+
+    // Try to compile as glob pattern first
+    let glob_pattern = if options.literal_search {
+        None
+    } else {
+        globset::Glob::new(&options.pattern)
+            .ok()
+            .map(|g| g.compile_matcher())
+    };
+    let pattern_lower = options.pattern.to_lowercase();
+
+    // Precompute smart case flag once (performance optimization)
+    let is_pattern_lowercase = options.pattern.chars().all(|c| !c.is_uppercase());
+
+    let max_results = options.max_results.unwrap_or(DEFAULT_MAX_RESULTS as u32) as usize;
+
+    // Build type_changes for ripgrep
+    let type_changes = build_type_changes(options);
+
+    // Build LowArgs for type filtering
+    let low_args = LowArgs {
+        patterns: vec![PatternSource::Regexp(options.pattern.clone())],
+        case: convert_case_mode(options.case_mode),
+        fixed_strings: options.literal_search,
+        hidden: options.include_hidden,
+        invert_match: options.invert_match,
+        mode: Mode::Search(SearchMode::Standard),
+        type_changes,
+        // Match ripgrep's --no-ignore flag behavior exactly
+        no_ignore_vcs: options.no_ignore,
+        no_ignore_exclude: options.no_ignore,
+        no_ignore_global: options.no_ignore,
+        no_ignore_parent: options.no_ignore,
+        no_ignore_dot: options.no_ignore,
+        ..Default::default()
+    };
+
+    // Build HiArgs for types
+    let hi_args = match HiArgs::from_low_args(low_args) {
+        Ok(h) => Arc::new(h),
+        Err(e) => {
+            log::error!("Failed to build HiArgs: {e}");
+            ctx.is_complete.store(true, std::sync::atomic::Ordering::Release);
+            return;
+        }
+    };
+
+    // Build directory walker with gitignore support and parallel traversal
+    let mut walker = WalkBuilder::new(root);
+    configure_walker(&mut walker, &hi_args);
+
+    // Use HiArgs.types() - handles built-in types + file_pattern
+    walker.types(hi_args.types().clone());
+
+    // Build the parallel visitor
+    let mut builder = FileSearchBuilder {
+        glob_pattern,
+        pattern: options.pattern.clone(),
+        pattern_lower,
+        case_mode: options.case_mode,
+        is_pattern_lowercase,
+        word_boundary: matches!(options.boundary_mode, Some(BoundaryMode::Word)),
+        max_results,
+        early_termination: options.early_termination.unwrap_or(false),
+        early_term_triggered: Arc::new(AtomicBool::new(false)),
+        results: Arc::clone(&ctx.results),
+        total_matches: Arc::clone(&ctx.total_matches),
+        last_read_time_atomic: Arc::clone(&ctx.last_read_time_atomic),
+        cancellation_rx: ctx.cancellation_rx.clone(),
+        first_result_tx: ctx.first_result_tx.clone(),
+        was_incomplete: Arc::clone(&ctx.was_incomplete),
+        error_count: Arc::clone(&ctx.error_count),
+        errors: Arc::clone(&ctx.errors),
+        start_time: ctx.start_time,
+    };
+
+    // Execute parallel search
+    walker.build_parallel().visit(&mut builder);
+
+    // Log error summary if any errors occurred
+    let error_count = ctx.error_count.load(Ordering::SeqCst);
+    if error_count > 0 {
+        log::info!(
+            "File search completed with {} errors. Pattern: '{}', Path: {}",
+            error_count,
+            options.pattern,
+            root.display()
+        );
+    }
+
+    // Mark complete
+    ctx.is_complete.store(true, Ordering::Release);
+}
