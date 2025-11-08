@@ -10,3 +10,11 @@ and use these types to configure the underlying grep-* libraries.
 // Submodules - types accessed via full paths
 pub(crate) mod hiargs;
 pub(crate) mod lowargs;
+
+// Parse module - made public for testing but hidden from docs
+#[doc(hidden)]
+pub mod parse;
+
+// Test utilities - public for integration tests but hidden from public docs
+#[doc(hidden)]
+pub use lowargs::{ColorChoice, ContextMode, ContextSeparator, LowArgs, Mode, SearchMode};

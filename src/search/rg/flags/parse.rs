@@ -95,8 +95,8 @@ fn set_log_levels(low: &LowArgs) {
 /// setup logging or read from a config file.
 ///
 /// This assumes the iterator given does *not* begin with the binary name.
-#[cfg(test)]
-pub(crate) fn parse_low_raw(
+#[doc(hidden)]
+pub fn parse_low_raw(
     rawargs: impl IntoIterator<Item = impl Into<OsString>>,
 ) -> anyhow::Result<LowArgs> {
     let mut args = LowArgs::default();
