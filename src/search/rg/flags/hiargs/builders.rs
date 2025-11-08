@@ -6,37 +6,11 @@ Contains methods for constructing haystacks, searchers, printers, and workers.
 
 use super::HiArgs;
 use crate::search::rg::{
-    flags::lowargs::{ContextMode, EncodingMode, Mode, SearchMode},
-    haystack::HaystackBuilder,
+    flags::lowargs::{ContextMode, EncodingMode, SearchMode},
     search::{PatternMatcher, Printer, SearchWorker, SearchWorkerBuilder},
 };
 
 impl HiArgs {
-    /// Return a properly configured builder for constructing haystacks.
-    ///
-    /// The builder can be used to turn a directory entry (from the `ignore`
-    /// crate) into something that can be searched.
-    pub(crate) fn haystack_builder(&self) -> HaystackBuilder {
-        let mut builder = HaystackBuilder::new();
-        builder.strip_dot_prefix(self.paths.has_implicit_path);
-        builder
-    }
-
-    /// Returns a builder for constructing a "path printer."
-    ///
-    /// This is useful for the `--files` mode in ripgrep, where the printer
-    /// just needs to emit paths and not need to worry about the functionality
-    /// of searching.
-    pub(crate) fn path_printer_builder(&self) -> grep::printer::PathPrinterBuilder {
-        let mut builder = grep::printer::PathPrinterBuilder::new();
-        builder
-            .color_specs(self.colors.clone())
-            .hyperlink(self.hyperlink_config.clone())
-            .separator(self.path_separator)
-            .terminator(self.path_terminator.unwrap_or(b'\n'));
-        builder
-    }
-
     /// Returns a JSON printer for MCP output.
     ///
     /// Always returns JSON format since this is used for MCP protocol.
@@ -112,49 +86,5 @@ impl HiArgs {
             }
         }
         Ok(builder.build())
-    }
-
-    /// Create a new builder for recursive directory traversal.
-    ///
-    /// The builder returned can be used to start a single threaded or multi
-    /// threaded directory traversal. For multi threaded traversal, the number
-    /// of threads configured is equivalent to `HiArgs::threads`.
-    ///
-    /// If `HiArgs::threads` is equal to `1`, then callers should generally
-    /// choose to explicitly use single threaded traversal since it won't have
-    /// the unnecessary overhead of synchronization.
-    pub(crate) fn walk_builder(&self) -> anyhow::Result<ignore::WalkBuilder> {
-        let mut builder = ignore::WalkBuilder::new(&self.paths.paths[0]);
-        for path in self.paths.paths.iter().skip(1) {
-            builder.add(path);
-        }
-        if !self.no_ignore_files {
-            for path in &self.ignore_file {
-                // Silently skip ignore files with errors (non-fatal)
-                let _ = builder.add_ignore(path);
-            }
-        }
-        builder
-            .max_depth(self.max_depth)
-            .follow_links(self.follow)
-            .max_filesize(self.max_filesize)
-            .threads(self.threads)
-            .same_file_system(self.one_file_system)
-            .skip_stdout(matches!(self.mode, Mode::Search(_)))
-            .overrides(self.globs.clone())
-            .types(self.types.clone())
-            .hidden(!self.hidden)
-            .parents(!self.no_ignore_parent)
-            .ignore(!self.no_ignore_dot)
-            .git_global(!self.no_ignore_vcs && !self.no_ignore_global)
-            .git_ignore(!self.no_ignore_vcs)
-            .git_exclude(!self.no_ignore_vcs && !self.no_ignore_exclude)
-            .require_git(!self.no_require_git)
-            .ignore_case_insensitive(self.ignore_file_case_insensitive);
-        if !self.no_ignore_dot {
-            builder.add_custom_ignore_filename(".rgignore");
-        }
-        // REMOVED: Sort logic - dead ripgrep code, real sorting uses sorting.rs
-        Ok(builder)
     }
 }

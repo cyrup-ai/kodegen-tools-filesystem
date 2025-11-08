@@ -1,16 +1,18 @@
 //!
 //! Tests for files mode
 
-use super::execute::execute;
-use super::super::context::SearchContext;
-use super::super::super::types::{CaseMode, SearchType, SearchSessionOptions, SearchResultType, SearchOutputMode};
+#[cfg(test)]
+mod tests {
+    use super::super::execute::execute;
+    use super::super::super::context::SearchContext;
+    use super::super::super::super::types::{CaseMode, SearchType, SearchSessionOptions, SearchResultType, SearchOutputMode};
 
-use std::fs;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::time::Instant;
-use tempfile::TempDir;
-use tokio::sync::{RwLock, watch};
+    use std::fs;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+    use std::time::Instant;
+    use tempfile::TempDir;
+    use tokio::sync::{RwLock, watch};
 
     #[test]
     fn test_files_mode_basic() {
@@ -47,11 +49,11 @@ use tokio::sync::{RwLock, watch};
             boundary_mode: None,
             output_mode: SearchOutputMode::Full,
             invert_match: false,
-            engine: super::super::super::types::Engine::Auto,
+            engine: super::super::super::super::types::Engine::Auto,
             preprocessor: None,
             preprocessor_globs: vec![],
             search_zip: false,
-            binary_mode: super::super::super::types::BinaryMode::Auto,
+            binary_mode: super::super::super::super::types::BinaryMode::Auto,
             multiline: false,
             max_filesize: None,
             max_depth: None,
@@ -140,11 +142,11 @@ use tokio::sync::{RwLock, watch};
             boundary_mode: None,
             output_mode: SearchOutputMode::Full,
             invert_match: false,
-            engine: super::super::super::types::Engine::Auto,
+            engine: super::super::super::super::types::Engine::Auto,
             preprocessor: None,
             preprocessor_globs: vec![],
             search_zip: false,
-            binary_mode: super::super::super::types::BinaryMode::Auto,
+            binary_mode: super::super::super::super::types::BinaryMode::Auto,
             multiline: false,
             max_filesize: None,
             max_depth: None,
@@ -223,11 +225,11 @@ use tokio::sync::{RwLock, watch};
             boundary_mode: None,
             output_mode: SearchOutputMode::Full,
             invert_match: false,
-            engine: super::super::super::types::Engine::Auto,
+            engine: super::super::super::super::types::Engine::Auto,
             preprocessor: None,
             preprocessor_globs: vec![],
             search_zip: false,
-            binary_mode: super::super::super::types::BinaryMode::Auto,
+            binary_mode: super::super::super::super::types::BinaryMode::Auto,
             multiline: false,
             max_filesize: None,
             max_depth: None,
@@ -311,11 +313,11 @@ use tokio::sync::{RwLock, watch};
             boundary_mode: None,
             output_mode: SearchOutputMode::Full,
             invert_match: false,
-            engine: super::super::super::types::Engine::Auto,
+            engine: super::super::super::super::types::Engine::Auto,
             preprocessor: None,
             preprocessor_globs: vec![],
             search_zip: false,
-            binary_mode: super::super::super::types::BinaryMode::Auto,
+            binary_mode: super::super::super::super::types::BinaryMode::Auto,
             multiline: false,
             max_filesize: None,
             max_depth: Some(2), // Limit to 2 levels deep
@@ -370,3 +372,4 @@ use tokio::sync::{RwLock, watch};
         let has_level3 = results.iter().any(|r| r.file.contains("level3"));
         assert!(!has_level3, "Should not include files beyond max_depth");
     }
+}

@@ -215,8 +215,6 @@ impl Default for CaseMode {
 /// The default is `Auto`.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum ColorChoice {
-    /// Color and hyperlinks will never be used.
-    Never,
     /// Color and hyperlinks will be used only when stdout is connected to a
     /// tty.
     Auto,
@@ -319,17 +317,6 @@ pub(crate) struct ContextSeparator(Option<BString>);
 impl Default for ContextSeparator {
     fn default() -> ContextSeparator {
         ContextSeparator(Some(BString::from("--")))
-    }
-}
-
-impl ContextSeparator {
-    /// Return the raw bytes of this separator.
-    ///
-    /// If context separators were disabled, then this returns `None`.
-    ///
-    /// Note that this may return a `Some` variant with zero bytes.
-    pub(crate) fn into_bytes(self) -> Option<Vec<u8>> {
-        self.0.map(std::convert::Into::into)
     }
 }
 

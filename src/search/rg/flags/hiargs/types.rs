@@ -23,10 +23,6 @@ use crate::search::rg::flags::lowargs::{BinaryMode, LowArgs, Mode, PatternSource
 /// generated.
 #[derive(Debug)]
 pub(crate) struct State {
-    /// Whether it's believed that tty is connected to stdout. Note that on
-    /// unix systems, this is always correct. On Windows, heuristics are used
-    /// by Rust's standard library, particularly for cygwin/MSYS environments.
-    pub(crate) is_terminal_stdout: bool,
     /// Whether stdin has already been consumed. This is useful to know and for
     /// providing good error messages when the user has tried to read from stdin
     /// in two different places. For example, `rg -f - -`.
@@ -41,10 +37,7 @@ impl State {
     /// Note that the state values may change throughout the lifetime of
     /// argument parsing.
     pub(crate) fn new() -> anyhow::Result<State> {
-        use std::io::IsTerminal;
-
         Ok(State {
-            is_terminal_stdout: std::io::stdout().is_terminal(),
             stdin_consumed: false,
             cwd: super::helpers::current_dir()?,
         })
@@ -128,15 +121,6 @@ impl Patterns {
 pub(crate) struct Paths {
     /// The actual paths.
     pub(crate) paths: Vec<PathBuf>,
-    /// This is true when ripgrep had to guess to search the current working
-    /// directory. e.g., When the user just runs `rg foo`. It is odd to need
-    /// this, but it subtly changes how the paths are printed. When no explicit
-    /// path is given, then ripgrep doesn't prefix each path with `./`. But
-    /// otherwise it does! This curious behavior matches what GNU grep does.
-    pub(crate) has_implicit_path: bool,
-    /// Set to true if it is known that only a single file descriptor will
-    /// be searched.
-    pub(crate) is_one_file: bool,
 }
 
 impl Paths {
@@ -164,20 +148,8 @@ impl Paths {
         }
         log::debug!("number of paths given to search: {}", paths.len());
         if !paths.is_empty() {
-            let is_one_file = paths.len() == 1
-                // Note that we specifically use `!paths[0].is_dir()` here
-                // instead of `paths[0].is_file()`. Namely, the latter can
-                // return `false` even when the path is something resembling
-                // a file. So instead, we just consider the path a file as
-                // long as we know it isn't a directory.
-                //
-                // See: https://github.com/BurntSushi/ripgrep/issues/2736
-                && (paths[0] == Path::new("-") || !paths[0].is_dir());
-            log::debug!("is_one_file? {is_one_file:?}");
             return Ok(Paths {
                 paths,
-                has_implicit_path: false,
-                is_one_file,
             });
         }
         // N.B. is_readable_stdin is a heuristic! Part of the issue is that a
@@ -199,23 +171,16 @@ impl Paths {
             stdin_consumed = state.stdin_consumed,
             mode = low.mode,
         );
-        let (path, is_one_file) = if use_cwd {
+        let path = if use_cwd {
             log::debug!("heuristic chose to search ./");
-            (PathBuf::from("./"), false)
+            PathBuf::from("./")
         } else {
             log::debug!("heuristic chose to search stdin");
-            (PathBuf::from("-"), true)
+            PathBuf::from("-")
         };
         Ok(Paths {
             paths: vec![path],
-            has_implicit_path: true,
-            is_one_file,
         })
-    }
-
-    /// Returns true if ripgrep will only search stdin and nothing else.
-    pub(crate) fn is_only_stdin(&self) -> bool {
-        self.paths.len() == 1 && self.paths[0] == Path::new("-")
     }
 }
 
