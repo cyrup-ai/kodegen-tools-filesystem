@@ -8,5 +8,5 @@ and use these types to configure the underlying grep-* libraries.
 */
 
 // Submodules - types accessed via full paths
-pub(crate) mod hiargs;
-pub(crate) mod lowargs;
+pub mod hiargs;
+pub mod lowargs;

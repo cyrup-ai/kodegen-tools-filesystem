@@ -18,11 +18,10 @@ use crate::search::rg::{
 mod builders;
 mod helpers;
 mod matchers;
-mod tests;
 mod types;
 
 // Re-export types for external use
-pub(crate) use types::{BinaryDetection, Paths, Patterns, State};
+pub use types::{BinaryDetection, Paths, Patterns, State};
 
 /// A high level representation of CLI arguments.
 ///

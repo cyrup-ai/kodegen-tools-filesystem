@@ -194,7 +194,7 @@ fn test_null_bytes_at_end() {
         .build();
 
     let mut sink = MatchCollector::new();
-    let _ = searcher.search_slice(&matcher, &binary_content, &mut sink);
+    let _ = searcher.search_slice(&matcher, binary_content, &mut sink);
 
     assert!(
         sink.is_binary,
@@ -221,7 +221,7 @@ fn test_consecutive_null_bytes() {
         .build();
 
     let mut sink = MatchCollector::new();
-    let _ = searcher.search_slice(&matcher, &binary_content, &mut sink);
+    let _ = searcher.search_slice(&matcher, binary_content, &mut sink);
 
     assert!(
         sink.is_binary,

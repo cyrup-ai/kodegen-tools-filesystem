@@ -13,23 +13,23 @@ use std::time::Instant;
 use tokio::sync::{RwLock, watch};
 
 /// Context for executing searches, containing session state references
-pub(super) struct SearchContext {
-    pub(super) results: Arc<RwLock<Vec<SearchResult>>>,
-    pub(super) total_matches: Arc<AtomicUsize>,
-    pub(super) total_files: Arc<AtomicUsize>,
-    pub(super) last_read_time_atomic: Arc<AtomicU64>,
-    pub(super) is_complete: Arc<AtomicBool>,
-    pub(super) is_error: Arc<RwLock<bool>>,
-    pub(super) error: Arc<RwLock<Option<String>>>,
-    pub(super) cancellation_rx: watch::Receiver<bool>,
-    pub(super) first_result_tx: watch::Sender<bool>,
-    pub(super) was_incomplete: Arc<RwLock<bool>>,
-    pub(super) error_count: Arc<AtomicUsize>,
-    pub(super) errors: Arc<RwLock<Vec<SearchError>>>,
-    pub(super) output_mode: SearchOutputMode,
-    pub(super) seen_files: Arc<RwLock<HashSet<String>>>,
-    pub(super) file_counts: Arc<RwLock<HashMap<String, FileCountData>>>,
-    pub(super) start_time: Instant,
+pub struct SearchContext {
+    pub results: Arc<RwLock<Vec<SearchResult>>>,
+    pub total_matches: Arc<AtomicUsize>,
+    pub total_files: Arc<AtomicUsize>,
+    pub last_read_time_atomic: Arc<AtomicU64>,
+    pub is_complete: Arc<AtomicBool>,
+    pub is_error: Arc<RwLock<bool>>,
+    pub error: Arc<RwLock<Option<String>>>,
+    pub cancellation_rx: watch::Receiver<bool>,
+    pub first_result_tx: watch::Sender<bool>,
+    pub was_incomplete: Arc<RwLock<bool>>,
+    pub error_count: Arc<AtomicUsize>,
+    pub errors: Arc<RwLock<Vec<SearchError>>>,
+    pub output_mode: SearchOutputMode,
+    pub seen_files: Arc<RwLock<HashSet<String>>>,
+    pub file_counts: Arc<RwLock<HashMap<String, FileCountData>>>,
+    pub start_time: Instant,
 }
 
 impl SearchContext {

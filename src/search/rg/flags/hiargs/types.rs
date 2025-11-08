@@ -22,7 +22,7 @@ use crate::search::rg::flags::lowargs::{BinaryMode, LowArgs, Mode, PatternSource
 /// when reading the patterns can impact how the file paths are ultimately
 /// generated.
 #[derive(Debug)]
-pub(crate) struct State {
+pub struct State {
     /// Whether stdin has already been consumed. This is useful to know and for
     /// providing good error messages when the user has tried to read from stdin
     /// in two different places. For example, `rg -f - -`.
@@ -36,7 +36,7 @@ impl State {
     ///
     /// Note that the state values may change throughout the lifetime of
     /// argument parsing.
-    pub(crate) fn new() -> anyhow::Result<State> {
+    pub fn new() -> anyhow::Result<State> {
         Ok(State {
             stdin_consumed: false,
             cwd: super::helpers::current_dir()?,
@@ -48,7 +48,7 @@ impl State {
 ///
 /// The number of patterns can be empty, e.g., via `-f /dev/null`.
 #[derive(Debug)]
-pub(crate) struct Patterns {
+pub struct Patterns {
     /// The actual patterns to match.
     pub(crate) patterns: Vec<String>,
 }
@@ -118,7 +118,7 @@ impl Patterns {
 ///
 /// This guarantees that there is always at least one path.
 #[derive(Debug)]
-pub(crate) struct Paths {
+pub struct Paths {
     /// The actual paths.
     pub(crate) paths: Vec<PathBuf>,
 }
@@ -194,14 +194,14 @@ impl Paths {
 /// considered a filter, and ripgrep follows the rule that an explicitly given
 /// file is always searched.)
 #[derive(Debug)]
-pub(crate) struct BinaryDetection {
-    pub(crate) explicit: grep::searcher::BinaryDetection,
-    pub(crate) implicit: grep::searcher::BinaryDetection,
+pub struct BinaryDetection {
+    pub explicit: grep::searcher::BinaryDetection,
+    pub implicit: grep::searcher::BinaryDetection,
 }
 
 impl BinaryDetection {
     /// Determines the correct binary detection mode from low-level arguments.
-    pub(crate) fn from_low_args(_: &State, low: &LowArgs) -> BinaryDetection {
+    pub fn from_low_args(_: &State, low: &LowArgs) -> BinaryDetection {
         let none = matches!(low.binary, BinaryMode::AsText) || low.null_data;
         let convert = matches!(low.binary, BinaryMode::SearchAndSuppress);
         let explicit = if none {
@@ -221,7 +221,7 @@ impl BinaryDetection {
 
     /// Returns true when both implicit and explicit binary detection is
     /// disabled.
-    pub(crate) fn is_none(&self) -> bool {
+    pub fn is_none(&self) -> bool {
         let none = grep::searcher::BinaryDetection::none();
         self.explicit == none && self.implicit == none
     }

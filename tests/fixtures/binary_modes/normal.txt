@@ -1,1 +1,5 @@
-FINDME in normal text
+This is a normal text file.
+It contains the pattern FINDME for testing.
+This line does not have the pattern.
+Another line with FINDME here.
+Final line without pattern.

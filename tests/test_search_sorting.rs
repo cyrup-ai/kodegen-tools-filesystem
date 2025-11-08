@@ -1,10 +1,11 @@
-//! Tests for sorting functionality for search results
-//!
-//! This module provides sorting capabilities for search results based on various criteria
-//! such as file path, modification time, access time, and creation time.
+/*!
+Tests for sorting functionality.
 
-use kodegen_tools_filesystem::search::sorting::{SortBy, SortDirection, sort_results};
-use kodegen_tools_filesystem::search::types::{SearchResult, SearchResultType};
+Extracted from src/search/sorting.rs
+*/
+
+use kodegen_tools_filesystem::search::sorting::{sort_results, SortBy, SortDirection};
+use kodegen_tools_filesystem::search::{SearchResult, SearchResultType};
 use std::time::{Duration, SystemTime};
 
 fn create_test_result(file: &str, modified: Option<SystemTime>) -> SearchResult {

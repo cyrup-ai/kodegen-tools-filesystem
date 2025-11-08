@@ -34,85 +34,85 @@ use {
 /// NOTE: Many fields are unused but kept for ripgrep compatibility.
 #[allow(dead_code)]
 #[derive(Debug, Default)]
-pub(crate) struct LowArgs {
+pub struct LowArgs {
     // Essential arguments.
-    pub(crate) mode: Mode,
-    pub(crate) positional: Vec<OsString>,
-    pub(crate) patterns: Vec<PatternSource>,
+    pub mode: Mode,
+    pub positional: Vec<OsString>,
+    pub patterns: Vec<PatternSource>,
     // Everything else, sorted lexicographically.
-    pub(crate) binary: BinaryMode,
-    pub(crate) boundary: Option<BoundaryMode>,
-    pub(crate) buffer: BufferMode,
-    pub(crate) byte_offset: bool,
-    pub(crate) case: CaseMode,
-    pub(crate) color: ColorChoice,
-    pub(crate) colors: Vec<UserColorSpec>,
-    pub(crate) column: Option<bool>,
-    pub(crate) context: ContextMode,
-    pub(crate) context_separator: ContextSeparator,
-    pub(crate) crlf: bool,
-    pub(crate) dfa_size_limit: Option<usize>,
-    pub(crate) encoding: EncodingMode,
-    pub(crate) engine: Engine,
-    pub(crate) field_context_separator: FieldContextSeparator,
-    pub(crate) field_match_separator: FieldMatchSeparator,
-    pub(crate) fixed_strings: bool,
-    pub(crate) follow: bool,
-    pub(crate) glob_case_insensitive: bool,
-    pub(crate) globs: Vec<String>,
-    pub(crate) heading: Option<bool>,
-    pub(crate) hidden: bool,
-    pub(crate) hostname_bin: Option<PathBuf>,
-    pub(crate) hyperlink_format: HyperlinkFormat,
-    pub(crate) iglobs: Vec<String>,
-    pub(crate) ignore_file: Vec<PathBuf>,
-    pub(crate) ignore_file_case_insensitive: bool,
-    pub(crate) include_zero: bool,
-    pub(crate) invert_match: bool,
-    pub(crate) line_number: Option<bool>,
-    pub(crate) max_columns: Option<u64>,
-    pub(crate) max_columns_preview: bool,
-    pub(crate) max_count: Option<u64>,
-    pub(crate) max_depth: Option<usize>,
-    pub(crate) max_filesize: Option<u64>,
-    pub(crate) mmap: MmapMode,
-    pub(crate) multiline: bool,
-    pub(crate) multiline_dotall: bool,
-    pub(crate) no_config: bool,
-    pub(crate) no_ignore_dot: bool,
-    pub(crate) no_ignore_exclude: bool,
-    pub(crate) no_ignore_files: bool,
-    pub(crate) no_ignore_global: bool,
-    pub(crate) no_ignore_messages: bool,
-    pub(crate) no_ignore_parent: bool,
-    pub(crate) no_ignore_vcs: bool,
-    pub(crate) no_messages: bool,
-    pub(crate) no_require_git: bool,
-    pub(crate) no_unicode: bool,
-    pub(crate) null: bool,
-    pub(crate) null_data: bool,
-    pub(crate) one_file_system: bool,
-    pub(crate) only_matching: bool,
-    pub(crate) path_separator: Option<u8>,
-    pub(crate) pre: Option<PathBuf>,
-    pub(crate) pre_glob: Vec<String>,
-    pub(crate) quiet: bool,
-    pub(crate) regex_size_limit: Option<usize>,
-    pub(crate) replace: Option<BString>,
-    pub(crate) search_zip: bool,
-    pub(crate) stats: bool,
-    pub(crate) stop_on_nonmatch: bool,
-    pub(crate) threads: Option<usize>,
-    pub(crate) trim: bool,
-    pub(crate) type_changes: Vec<TypeChange>,
-    pub(crate) unrestricted: usize,
-    pub(crate) vimgrep: bool,
-    pub(crate) with_filename: Option<bool>,
+    pub binary: BinaryMode,
+    pub boundary: Option<BoundaryMode>,
+    pub buffer: BufferMode,
+    pub byte_offset: bool,
+    pub case: CaseMode,
+    pub color: ColorChoice,
+    pub colors: Vec<UserColorSpec>,
+    pub column: Option<bool>,
+    pub context: ContextMode,
+    pub context_separator: ContextSeparator,
+    pub crlf: bool,
+    pub dfa_size_limit: Option<usize>,
+    pub encoding: EncodingMode,
+    pub engine: Engine,
+    pub field_context_separator: FieldContextSeparator,
+    pub field_match_separator: FieldMatchSeparator,
+    pub fixed_strings: bool,
+    pub follow: bool,
+    pub glob_case_insensitive: bool,
+    pub globs: Vec<String>,
+    pub heading: Option<bool>,
+    pub hidden: bool,
+    pub hostname_bin: Option<PathBuf>,
+    pub hyperlink_format: HyperlinkFormat,
+    pub iglobs: Vec<String>,
+    pub ignore_file: Vec<PathBuf>,
+    pub ignore_file_case_insensitive: bool,
+    pub include_zero: bool,
+    pub invert_match: bool,
+    pub line_number: Option<bool>,
+    pub max_columns: Option<u64>,
+    pub max_columns_preview: bool,
+    pub max_count: Option<u64>,
+    pub max_depth: Option<usize>,
+    pub max_filesize: Option<u64>,
+    pub mmap: MmapMode,
+    pub multiline: bool,
+    pub multiline_dotall: bool,
+    pub no_config: bool,
+    pub no_ignore_dot: bool,
+    pub no_ignore_exclude: bool,
+    pub no_ignore_files: bool,
+    pub no_ignore_global: bool,
+    pub no_ignore_messages: bool,
+    pub no_ignore_parent: bool,
+    pub no_ignore_vcs: bool,
+    pub no_messages: bool,
+    pub no_require_git: bool,
+    pub no_unicode: bool,
+    pub null: bool,
+    pub null_data: bool,
+    pub one_file_system: bool,
+    pub only_matching: bool,
+    pub path_separator: Option<u8>,
+    pub pre: Option<PathBuf>,
+    pub pre_glob: Vec<String>,
+    pub quiet: bool,
+    pub regex_size_limit: Option<usize>,
+    pub replace: Option<BString>,
+    pub search_zip: bool,
+    pub stats: bool,
+    pub stop_on_nonmatch: bool,
+    pub threads: Option<usize>,
+    pub trim: bool,
+    pub type_changes: Vec<TypeChange>,
+    pub unrestricted: usize,
+    pub vimgrep: bool,
+    pub with_filename: Option<bool>,
 }
 
 /// The overall mode that ripgrep should operate in.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Mode {
+pub enum Mode {
     Search(SearchMode),
     Files,
 }
@@ -125,7 +125,7 @@ impl Default for Mode {
 
 /// The kind of search that ripgrep is going to perform.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SearchMode {
+pub enum SearchMode {
     Standard,
     Count,
     CountMatches,
@@ -134,7 +134,7 @@ pub(crate) enum SearchMode {
 
 /// Indicates how ripgrep should treat binary data.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum BinaryMode {
+pub enum BinaryMode {
     /// Automatically determine the binary mode to use. Essentially, when
     /// a file is searched explicitly, then it will be searched using the
     /// `SearchAndSuppress` strategy. Otherwise, it will be searched in a way
@@ -164,7 +164,7 @@ impl Default for BinaryMode {
 
 /// Indicates what kind of boundary mode to use (line or word).
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum BoundaryMode {
+pub enum BoundaryMode {
     /// Only allow matches when surrounded by line bounaries.
     Line,
     /// Only allow matches when surrounded by word bounaries.
@@ -175,7 +175,7 @@ pub(crate) enum BoundaryMode {
 ///
 /// The default is `Auto`.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum BufferMode {
+pub enum BufferMode {
     /// Select the buffer mode automatically based on whether stdout is
     /// connected to a tty.
     Auto,
@@ -192,7 +192,7 @@ impl Default for BufferMode {
 ///
 /// The default is `Sensitive`.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum CaseMode {
+pub enum CaseMode {
     /// Patterns are matched case sensitively. i.e., `a` does not match `A`.
     Sensitive,
     /// Patterns are matched case insensitively. i.e., `a` does match `A`.
@@ -214,7 +214,7 @@ impl Default for CaseMode {
 ///
 /// The default is `Auto`.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum ColorChoice {
+pub enum ColorChoice {
     /// Color and hyperlinks will be used only when stdout is connected to a
     /// tty.
     Auto,
@@ -231,7 +231,7 @@ impl Default for ColorChoice {
 ///
 /// The default is no context at all.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum ContextMode {
+pub enum ContextMode {
     /// Only show a certain number of lines before and after each match.
     Limited(ContextModeLimited),
 }
@@ -281,7 +281,7 @@ impl ContextMode {
 /// settings always take precedent over the -C/--context setting, regardless of
 /// order. Thus, we need to keep track of them separately.
 #[derive(Debug, Default, Eq, PartialEq)]
-pub(crate) struct ContextModeLimited {
+pub struct ContextModeLimited {
     before: Option<usize>,
     after: Option<usize>,
     both: Option<usize>,
@@ -312,7 +312,7 @@ impl ContextModeLimited {
 ///
 /// The default is `--`.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ContextSeparator(Option<BString>);
+pub struct ContextSeparator(pub Option<BString>);
 
 impl Default for ContextSeparator {
     fn default() -> ContextSeparator {
@@ -324,7 +324,7 @@ impl Default for ContextSeparator {
 ///
 /// The default is `Auto`.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum EncodingMode {
+pub enum EncodingMode {
     /// Use only BOM sniffing to auto-detect an encoding.
     Auto,
     /// Use an explicit encoding forcefully, but let BOM sniffing override it.
@@ -346,7 +346,7 @@ impl Default for EncodingMode {
 ///
 /// The default is `Default`.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum Engine {
+pub enum Engine {
     /// Uses the default regex engine: Rust's `regex` crate.
     ///
     /// (Well, technically it uses `regex-automata`, but `regex-automata` is
@@ -373,7 +373,7 @@ impl Default for Engine {
 ///
 /// The default is `-`.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct FieldContextSeparator(BString);
+pub struct FieldContextSeparator(pub BString);
 
 impl Default for FieldContextSeparator {
     fn default() -> FieldContextSeparator {
@@ -388,7 +388,7 @@ impl FieldContextSeparator {}
 ///
 /// The default is `:`.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct FieldMatchSeparator(BString);
+pub struct FieldMatchSeparator(pub BString);
 
 impl Default for FieldMatchSeparator {
     fn default() -> FieldMatchSeparator {
@@ -402,7 +402,7 @@ impl FieldMatchSeparator {}
 ///
 /// The default is `Auto`.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum MmapMode {
+pub enum MmapMode {
     /// This instructs ripgrep to use heuristics for selecting when to and not
     /// to use memory maps for searching.
     Auto,
@@ -417,14 +417,14 @@ impl Default for MmapMode {
 
 /// Represents a source of patterns that ripgrep should search for.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum PatternSource {
+pub enum PatternSource {
     /// Comes from the `-e/--regexp` flag.
     Regexp(String),
 }
 
 /// A single instance of a selection of one of ripgrep's file types.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum TypeChange {
+pub enum TypeChange {
     /// Select the given type for filtering.
     Select { name: String },
     /// Select the given type for filtering but negate it.

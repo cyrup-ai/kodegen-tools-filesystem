@@ -51,7 +51,7 @@ pub fn build_pattern_matcher(
 }
 
 /// Build Rust regex matcher with ripgrep's exact configuration
-pub(crate) fn build_rust_matcher(
+pub fn build_rust_matcher(
     pattern: &str,
     case_mode: super::types::CaseMode,
     literal_search: bool,
@@ -90,7 +90,7 @@ pub(crate) fn build_rust_matcher(
 }
 
 /// Build PCRE2 matcher with ripgrep's exact configuration
-pub(crate) fn build_pcre2_matcher(
+pub fn build_pcre2_matcher(
     pattern: &str,
     case_mode: super::types::CaseMode,
     literal_search: bool,

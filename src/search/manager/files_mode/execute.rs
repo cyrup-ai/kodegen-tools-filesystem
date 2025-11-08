@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 /// Execute files mode: list all files that would be searched
-pub(in super::super) fn execute(options: &SearchSessionOptions, root: &Path, ctx: &mut SearchContext) {
+pub fn execute(options: &SearchSessionOptions, root: &Path, ctx: &mut SearchContext) {
     let max_results = options.max_results.unwrap_or(DEFAULT_MAX_RESULTS as u32) as usize;
 
     // Build type changes for filtering

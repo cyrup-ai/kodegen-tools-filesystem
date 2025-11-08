@@ -6,8 +6,5 @@ mod visitor_builder;
 mod visitor;
 mod execute;
 
-#[cfg(test)]
-mod tests;
-
 // Re-export the public API
-pub(super) use execute::execute;
+pub use execute::execute;

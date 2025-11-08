@@ -7,9 +7,6 @@ pub mod start_search;
 pub mod stop_search;
 pub mod types;
 
-#[cfg(test)]
-mod tests;
-
 pub use get_more_results::*;
 pub use list_searches::*;
 pub use manager::*;
