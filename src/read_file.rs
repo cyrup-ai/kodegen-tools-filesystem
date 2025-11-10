@@ -101,14 +101,14 @@ async fn read_lines_tail_with_total(
 #[derive(Clone)]
 pub struct ReadFileTool {
     default_line_limit: usize,
-    config_manager: kodegen_tools_config::ConfigManager,
+    config_manager: kodegen_config_manager::ConfigManager,
 }
 
 impl ReadFileTool {
     #[must_use]
     pub fn new(
         default_line_limit: usize,
-        config_manager: kodegen_tools_config::ConfigManager,
+        config_manager: kodegen_config_manager::ConfigManager,
     ) -> Self {
         Self {
             default_line_limit,

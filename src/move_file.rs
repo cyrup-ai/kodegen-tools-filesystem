@@ -8,12 +8,12 @@ use tokio::fs;
 
 #[derive(Clone)]
 pub struct MoveFileTool {
-    config_manager: kodegen_tools_config::ConfigManager,
+    config_manager: kodegen_config_manager::ConfigManager,
 }
 
 impl MoveFileTool {
     #[must_use]
-    pub fn new(config_manager: kodegen_tools_config::ConfigManager) -> Self {
+    pub fn new(config_manager: kodegen_config_manager::ConfigManager) -> Self {
         Self { config_manager }
     }
 }

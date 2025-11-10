@@ -43,7 +43,7 @@ pub fn enforce_result_limits(options: &mut SearchSessionOptions) -> usize {
 /// Returns error if path validation fails
 pub async fn validate_and_generate_id(
     options: &SearchSessionOptions,
-    config_manager: &kodegen_tools_config::ConfigManager,
+    config_manager: &kodegen_config_manager::ConfigManager,
 ) -> Result<(PathBuf, String), McpError> {
     // Validate path FIRST (no point generating ID if path invalid)
     let validated_path = validate_path(&options.root_path, config_manager).await?;

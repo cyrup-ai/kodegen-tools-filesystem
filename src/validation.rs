@@ -32,12 +32,12 @@ fn expand_home(filepath: &str) -> String {
 }
 
 /// Get the list of allowed directories from config
-fn get_allowed_dirs(config: &kodegen_tools_config::ServerConfig) -> &[String] {
+fn get_allowed_dirs(config: &kodegen_config_manager::ServerConfig) -> &[String] {
     &config.allowed_directories
 }
 
 /// Get the list of denied directories from config
-fn get_denied_dirs(config: &kodegen_tools_config::ServerConfig) -> &[String] {
+fn get_denied_dirs(config: &kodegen_config_manager::ServerConfig) -> &[String] {
     &config.denied_directories
 }
 
@@ -45,7 +45,7 @@ fn get_denied_dirs(config: &kodegen_tools_config::ServerConfig) -> &[String] {
 /// `restriction_reason` is `Some(message)` if denied, `None` if allowed
 fn is_path_allowed(
     path_to_check: &str,
-    config: &kodegen_tools_config::ServerConfig,
+    config: &kodegen_config_manager::ServerConfig,
 ) -> (bool, Option<String>) {
     let allowed_dirs = get_allowed_dirs(config);
     let denied_dirs = get_denied_dirs(config);
@@ -144,7 +144,7 @@ fn is_path_allowed(
 /// Returns error if path is denied, validation times out, or parent directories are invalid
 pub async fn validate_path(
     requested_path: &str,
-    config_manager: &kodegen_tools_config::ConfigManager,
+    config_manager: &kodegen_config_manager::ConfigManager,
 ) -> Result<PathBuf, McpError> {
     // Get timeout from configuration (default: 30 seconds)
     let timeout_ms = config_manager.get_path_validation_timeout_ms();

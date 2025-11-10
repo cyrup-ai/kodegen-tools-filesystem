@@ -37,12 +37,12 @@ async fn count_lines_streaming(path: &std::path::Path) -> Result<usize, McpError
 
 #[derive(Clone)]
 pub struct GetFileInfoTool {
-    config_manager: kodegen_tools_config::ConfigManager,
+    config_manager: kodegen_config_manager::ConfigManager,
 }
 
 impl GetFileInfoTool {
     #[must_use]
-    pub fn new(config_manager: kodegen_tools_config::ConfigManager) -> Self {
+    pub fn new(config_manager: kodegen_config_manager::ConfigManager) -> Self {
         Self { config_manager }
     }
 }

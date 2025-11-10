@@ -47,7 +47,7 @@ impl ReadMultipleFilesTool {
     #[must_use]
     pub fn new(
         default_line_limit: usize,
-        config_manager: kodegen_tools_config::ConfigManager,
+        config_manager: kodegen_config_manager::ConfigManager,
     ) -> Self {
         Self {
             read_file_tool: ReadFileTool::new(default_line_limit, config_manager),

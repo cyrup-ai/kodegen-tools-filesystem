@@ -14,12 +14,12 @@ use tokio::io::AsyncWriteExt;
 
 #[derive(Clone)]
 pub struct WriteFileTool {
-    config_manager: kodegen_tools_config::ConfigManager,
+    config_manager: kodegen_config_manager::ConfigManager,
 }
 
 impl WriteFileTool {
     #[must_use]
-    pub fn new(config_manager: kodegen_tools_config::ConfigManager) -> Self {
+    pub fn new(config_manager: kodegen_config_manager::ConfigManager) -> Self {
         Self { config_manager }
     }
 }

@@ -24,13 +24,13 @@ use tokio::sync::{RwLock, watch};
 #[derive(Clone)]
 pub struct SearchManager {
     sessions: Arc<RwLock<HashMap<String, SearchSession>>>,
-    config_manager: kodegen_tools_config::ConfigManager,
+    config_manager: kodegen_config_manager::ConfigManager,
 }
 
 impl SearchManager {
     /// Create a new search manager
     #[must_use]
-    pub fn new(config_manager: kodegen_tools_config::ConfigManager) -> Self {
+    pub fn new(config_manager: kodegen_config_manager::ConfigManager) -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             config_manager,
