@@ -32,3 +32,137 @@ pub mod get_file_info;
 pub use get_file_info::*;
 
 pub mod search;
+
+/// Start the filesystem HTTP server programmatically
+///
+/// Returns a ServerHandle for graceful shutdown control.
+/// This function is non-blocking - the server runs in background tasks.
+///
+/// # Arguments
+/// * `addr` - Socket address to bind to (e.g., "127.0.0.1:30437")
+/// * `tls_cert` - Optional path to TLS certificate file
+/// * `tls_key` - Optional path to TLS private key file
+///
+/// # Returns
+/// ServerHandle for graceful shutdown, or error if startup fails
+pub async fn start_server(
+    addr: std::net::SocketAddr,
+    tls_cert: Option<std::path::PathBuf>,
+    tls_key: Option<std::path::PathBuf>,
+) -> anyhow::Result<kodegen_server_http::ServerHandle> {
+    use kodegen_server_http::{create_http_server, Managers, RouterSet, register_tool};
+    use rmcp::handler::server::router::{prompt::PromptRouter, tool::ToolRouter};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    let tls_config = match (tls_cert, tls_key) {
+        (Some(cert), Some(key)) => Some((cert, key)),
+        _ => None,
+    };
+
+    let shutdown_timeout = Duration::from_secs(30);
+
+    create_http_server("filesystem", addr, tls_config, shutdown_timeout, |config, _tracker| {
+        let config = config.clone();
+        Box::pin(async move {
+            let tool_router = ToolRouter::new();
+            let prompt_router = PromptRouter::new();
+            let managers = Managers::new();
+
+            // Create search manager
+            let search_manager = Arc::new(crate::search::SearchManager::new(config.clone()));
+            let file_read_line_limit = config.get_file_read_line_limit();
+
+            // Register all 14 filesystem tools
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::ReadFileTool::new(file_read_line_limit, config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::ReadMultipleFilesTool::new(file_read_line_limit, config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::WriteFileTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::MoveFileTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::DeleteFileTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::DeleteDirectoryTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::ListDirectoryTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::CreateDirectoryTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::GetFileInfoTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::EditBlockTool::new(config.clone()),
+            );
+
+            // Search tools
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::search::StartSearchTool::new(search_manager.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::search::GetMoreSearchResultsTool::new(search_manager.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::search::StopSearchTool::new(search_manager.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::search::ListSearchesTool::new(search_manager.clone()),
+            );
+
+            // Start cleanup task
+            search_manager.start_cleanup_task();
+
+            Ok(RouterSet::new(tool_router, prompt_router, managers))
+        })
+    }).await
+}

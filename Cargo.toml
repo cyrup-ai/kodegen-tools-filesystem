@@ -1,6 +1,6 @@
 [package]
 name = "kodegen_tools_filesystem"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 description = "KODEGEN.ᴀɪ: Memory-efficient, Blazing-Fast, MCP tools for code generation agents."
 authors = ["KODEGEN.ᴀɪ"]
@@ -76,6 +76,9 @@ futures = "0.3"
 # Logging - for debug/error/info in filesystem operations
 log = "0.4"
 env_logger = "0.11"
+
+# TLS support - for embedded server mode
+rustls = "0.23"
 
 # Date/time - for timestamps in edit logging
 chrono = { version = "0.4", features = ["serde"] }
