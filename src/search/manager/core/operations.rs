@@ -44,7 +44,7 @@ pub async fn terminate_search(
 ///
 /// # Errors
 /// Returns error if session not found
-pub async fn get_more_results(
+pub async fn get_results(
     sessions: &RwLock<HashMap<String, SearchSession>>,
     session_id: &str,
     offset: i64,

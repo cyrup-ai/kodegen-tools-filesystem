@@ -1,4 +1,4 @@
-pub mod get_more_results;
+pub mod get_results;
 pub mod list_searches;
 pub mod manager;
 pub mod rg;
@@ -7,7 +7,7 @@ pub mod start_search;
 pub mod stop_search;
 pub mod types;
 
-pub use get_more_results::*;
+pub use get_results::*;
 pub use list_searches::*;
 pub use manager::*;
 pub use start_search::*;

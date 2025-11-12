@@ -200,7 +200,7 @@ pub struct StartSearchResponse {
     pub results_limited: Option<bool>,
 }
 
-/// Response for `get_more_search_results`
+/// Response for `get_search_results`
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct GetMoreSearchResultsResponse {
     pub session_id: String,

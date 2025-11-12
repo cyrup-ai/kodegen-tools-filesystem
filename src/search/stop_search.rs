@@ -102,11 +102,11 @@ impl Tool for StopSearchTool {
                      Typical workflow:\n\
                      1. Start: start_search({\"path\": \"/large/directory\", \"pattern\": \"TODO\"})\n\
                         Returns: {\"session_id\": \"search_123_1234567890\"}\n\
-                     2. Read: get_more_search_results({\"session_id\": \"search_123_1234567890\"})\n\
+                     2. Read: get_search_results({\"session_id\": \"search_123_1234567890\"})\n\
                         See initial results, realize you found what you need\n\
                      3. Stop: stop_search({\"session_id\": \"search_123_1234567890\"})\n\
                         Terminates the search early\n\
-                     4. Read: get_more_search_results({\"session_id\": \"search_123_1234567890\"})\n\
+                     4. Read: get_search_results({\"session_id\": \"search_123_1234567890\"})\n\
                         Can still read final results\n\n\
                      When to use:\n\
                      - Found what you need in first few results\n\
@@ -119,7 +119,7 @@ impl Tool for StopSearchTool {
                      - Both return success/not found\n\n\
                      After termination:\n\
                      - Session remains in memory for 5 minutes\n\
-                     - Can still call get_more_search_results\n\
+                     - Can still call get_search_results\n\
                      - Automatic cleanup removes old sessions",
                 ),
             },

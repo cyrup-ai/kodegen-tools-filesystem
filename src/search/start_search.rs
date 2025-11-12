@@ -138,7 +138,7 @@ impl Tool for StartSearchTool {
          PRO TIP: When user requests are ambiguous about whether they want files or content,\n\
          run both searches concurrently and combine results for comprehensive coverage.\n\n\
          Unlike regular search tools, this starts a background search process and returns\n\
-         immediately with a session ID. Use get_more_search_results to get results as they\n\
+         immediately with a session ID. Use get_search_results to get results as they\n\
          come in, and stop_search to stop the search early if needed.\n\n\
          Perfect for large directories where you want to see results immediately and\n\
          have the option to cancel if the search takes too long or you find what you need.\n\n\
@@ -299,7 +299,7 @@ impl Tool for StartSearchTool {
                           \"search_type\": \"content\",\n\
                           \"file_pattern\": \"*.rs\"\n\
                         })\n\n\
-                     Returns session_id immediately. Use get_more_search_results to fetch results.",
+                     Returns session_id immediately. Use get_search_results to fetch results.",
                 ),
             },
         ])

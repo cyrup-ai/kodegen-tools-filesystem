@@ -160,13 +160,13 @@ impl SearchManager {
     ///
     /// # Errors
     /// Returns error if session not found
-    pub async fn get_more_results(
+    pub async fn get_results(
         &self,
         session_id: &str,
         offset: i64,
         length: usize,
     ) -> Result<GetMoreSearchResultsResponse, McpError> {
-        operations::get_more_results(&self.sessions, session_id, offset, length).await
+        operations::get_results(&self.sessions, session_id, offset, length).await
     }
 
     /// List all active search sessions

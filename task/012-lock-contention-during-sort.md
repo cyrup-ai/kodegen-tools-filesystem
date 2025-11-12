@@ -25,7 +25,7 @@ if let Some(sort_criterion) = sort_by {
 
 **The Problem:**
 While sorting large result sets (10,000+ items), the write lock is held, blocking:
-1. `get_more_results()` calls (can't read results)
+1. `get_results()` calls (can't read results)
 2. Background search threads (can't append new results)
 3. Other API calls on the same session
 
@@ -44,7 +44,7 @@ Search for common term in large codebase:
 
 **During these 80ms:**
 - Write lock held on results vector
-- `get_more_results()` calls blocked → API timeouts
+- `get_results()` calls blocked → API timeouts
 - Background threads trying to add results → blocked (shouldn't happen post-completion, but still)
 - Other requests on same session → blocked
 
@@ -54,7 +54,7 @@ Search for common term in large codebase:
 T=0ms:    Start search (50,000 results)
 T=1000ms: Search completes
 T=1001ms: Sorting starts, WRITE LOCK ACQUIRED
-          ├─ T=1010ms: Client calls get_more_results() → BLOCKED
+          ├─ T=1010ms: Client calls get_results() → BLOCKED
           ├─ T=1020ms: Client calls list_searches() → BLOCKED
           └─ T=1080ms: WRITE LOCK RELEASED, sort complete
 T=1081ms: Blocked operations resume
@@ -232,7 +232,7 @@ async fn test_sort_doesnt_block_other_operations() {
     // In parallel, try to access results
     let access_task = tokio::spawn(async move {
         let access_start = Instant::now();
-        let _ = get_more_results(&session_id, 0, 100).await;
+        let _ = get_results(&session_id, 0, 100).await;
         access_start.elapsed()  // Should be fast (<10ms)
     });
 

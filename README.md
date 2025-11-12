@@ -102,7 +102,7 @@ The server exposes 14 MCP tools:
 | | `list_directory` | List directory contents with depth |
 | | `delete_directory` | Delete directories recursively |
 | Search | `start_search` | Start file or content search |
-| | `get_more_search_results` | Paginate search results |
+| | `get_search_results` | Paginate search results |
 | | `stop_search` | Cancel active search |
 | | `list_searches` | List active search sessions |
 
@@ -144,7 +144,7 @@ let session_id = response.session_id;
 
 // Get results
 let results = client.call_tool(
-    tools::GET_MORE_SEARCH_RESULTS,
+    tools::get_search_results,
     json!({
         "session_id": session_id,
         "offset": 0,
@@ -202,7 +202,7 @@ cargo clippy --fix
 
 The search system uses a session-based model:
 1. `start_search` creates a background search task and returns a session ID
-2. `get_more_search_results` retrieves paginated results
+2. `get_search_results` retrieves paginated results
 3. `stop_search` cancels the background task
 4. Sessions auto-expire after inactivity
 

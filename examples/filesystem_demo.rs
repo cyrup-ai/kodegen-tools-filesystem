@@ -184,12 +184,12 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         let session_id = response.session_id;
         info!("Started search with session ID: {}", session_id);
 
-        // 10. GET_MORE_SEARCH_RESULTS - Get search results
+        // 10. get_search_results - Get search results
         {
-            info!("10. Testing get_more_search_results");
+            info!("10. Testing get_search_results");
             client
                 .call_tool(
-                    tools::GET_MORE_SEARCH_RESULTS,
+                    tools::get_search_results,
                     json!({ "session_id": session_id, "offset": 0, "length": 10 }),
                 )
                 .await

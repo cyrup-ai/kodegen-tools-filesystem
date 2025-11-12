@@ -31,7 +31,7 @@ impl Tool for GetMoreSearchResultsTool {
     type PromptArgs = GetMoreSearchResultsPromptArgs;
 
     fn name() -> &'static str {
-        "get_more_search_results"
+        "get_search_results"
     }
 
     fn description() -> &'static str {
@@ -60,7 +60,7 @@ impl Tool for GetMoreSearchResultsTool {
     async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
         let response = self
             .manager
-            .get_more_results(&args.session_id, args.offset, args.length)
+            .get_results(&args.session_id, args.offset, args.length)
             .await?;
 
         // Return structured JSON response
@@ -97,13 +97,13 @@ impl Tool for GetMoreSearchResultsTool {
             PromptMessage {
                 role: PromptMessageRole::Assistant,
                 content: PromptMessageContent::text(
-                    "Use get_more_search_results to read results from a search started with start_search:\n\n\
+                    "Use get_search_results to read results from a search started with start_search:\n\n\
                      1. Read first 100 results:\n\
-                        get_more_search_results({\"session_id\": \"search_1_123\", \"offset\": 0, \"length\": 100})\n\n\
+                        get_search_results({\"session_id\": \"search_1_123\", \"offset\": 0, \"length\": 100})\n\n\
                      2. Read next page:\n\
-                        get_more_search_results({\"session_id\": \"search_1_123\", \"offset\": 100, \"length\": 100})\n\n\
+                        get_search_results({\"session_id\": \"search_1_123\", \"offset\": 100, \"length\": 100})\n\n\
                      3. Read last 20 results:\n\
-                        get_more_search_results({\"session_id\": \"search_1_123\", \"offset\": -20})\n\n\
+                        get_search_results({\"session_id\": \"search_1_123\", \"offset\": -20})\n\n\
                      The response shows:\n\
                      - Current search status (IN PROGRESS or COMPLETED)\n\
                      - Results in the requested range\n\
