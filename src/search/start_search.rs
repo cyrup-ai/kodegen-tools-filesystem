@@ -1,8 +1,8 @@
-use kodegen_mcp_schema::filesystem::{StartSearchArgs, StartSearchPromptArgs};
+use kodegen_mcp_schema::filesystem::{FsStartSearchArgs, FsStartSearchPromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::json;
 use std::sync::Arc;
 
 use super::{SearchManager, SearchSessionOptions, SearchType, CaseMode, BoundaryMode, SearchOutputMode};
@@ -28,11 +28,11 @@ impl StartSearchTool {
 // ============================================================================
 
 impl Tool for StartSearchTool {
-    type Args = StartSearchArgs;
-    type PromptArgs = StartSearchPromptArgs;
+    type Args = FsStartSearchArgs;
+    type PromptArgs = FsStartSearchPromptArgs;
 
     fn name() -> &'static str {
-        "start_search"
+        "fs_start_search"
     }
 
     fn description() -> &'static str {
@@ -157,7 +157,7 @@ impl Tool for StartSearchTool {
         false
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         // Handle backward compatibility: ignore_case overrides case_mode if present
         let case_mode = if let Some(ignore_case) = args.ignore_case {
             if ignore_case {
@@ -223,9 +223,9 @@ impl Tool for StartSearchTool {
         }
 
         let options = SearchSessionOptions {
-            root_path: args.path,
-            pattern: args.pattern,
-            search_type: args.search_type,
+            root_path: args.path.clone(),
+            pattern: args.pattern.clone(),
+            search_type: args.search_type.clone(),
             file_pattern: args.file_pattern,
             r#type: args.r#type,
             type_not: args.type_not,
@@ -259,7 +259,38 @@ impl Tool for StartSearchTool {
 
         let response = self.manager.start_search(options).await?;
 
-        Ok(json!({
+        let mut contents = Vec::new();
+
+        // Content 1: Human-readable summary
+        let status = if response.is_complete {
+            if response.is_error {
+                "failed"
+            } else {
+                "completed"
+            }
+        } else {
+            "running"
+        };
+
+        let search_type_str = match args.search_type {
+            SearchType::Files => "files",
+            SearchType::Content => "content",
+        };
+
+        let summary = format!(
+            "🔍 Started search session: {}\n\nPattern: {}\nPath: {}\nType: {}\nStatus: {}\nInitial results: {}",
+            response.session_id,
+            args.pattern,
+            args.path,
+            search_type_str,
+            status,
+            response.total_results
+        );
+        contents.push(Content::text(summary));
+
+        // Content 2: JSON metadata
+        let metadata = json!({
+            "success": true,
             "session_id": response.session_id,
             "is_complete": response.is_complete,
             "is_error": response.is_error,
@@ -269,7 +300,15 @@ impl Tool for StartSearchTool {
             "error_count": response.error_count,
             "max_results": response.max_results,
             "results_limited": response.results_limited,
-        }))
+            "pattern": args.pattern,
+            "path": args.path,
+            "search_type": search_type_str,
+        });
+        let json_str = serde_json::to_string_pretty(&metadata)
+            .unwrap_or_else(|_| "{}".to_string());
+        contents.push(Content::text(json_str));
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

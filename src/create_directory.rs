@@ -1,9 +1,9 @@
 use crate::validate_path;
-use kodegen_mcp_schema::filesystem::{CreateDirectoryArgs, CreateDirectoryPromptArgs};
+use kodegen_mcp_schema::filesystem::{FsCreateDirectoryArgs, FsCreateDirectoryPromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::json;
 use tokio::fs;
 
 // ============================================================================
@@ -27,11 +27,11 @@ impl CreateDirectoryTool {
 // ============================================================================
 
 impl Tool for CreateDirectoryTool {
-    type Args = CreateDirectoryArgs;
-    type PromptArgs = CreateDirectoryPromptArgs;
+    type Args = FsCreateDirectoryArgs;
+    type PromptArgs = FsCreateDirectoryPromptArgs;
 
     fn name() -> &'static str {
-        "create_directory"
+        "fs_create_directory"
     }
 
     fn description() -> &'static str {
@@ -51,16 +51,28 @@ impl Tool for CreateDirectoryTool {
         true // Can be called multiple times safely
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
 
         fs::create_dir_all(&valid_path).await?;
 
-        Ok(json!({
+        let mut contents = Vec::new();
+
+        // Human summary
+        let summary = format!("✓ Created directory {}", valid_path.display());
+        contents.push(Content::text(summary));
+
+        // JSON metadata
+        let metadata = json!({
             "success": true,
             "path": valid_path.to_string_lossy(),
-            "message": "Directory created successfully"
-        }))
+            "created": true
+        });
+        let json_str = serde_json::to_string_pretty(&metadata)
+            .unwrap_or_else(|_| "{}".to_string());
+        contents.push(Content::text(json_str));
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

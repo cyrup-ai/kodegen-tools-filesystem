@@ -1,9 +1,9 @@
 use super::SearchManager;
-use kodegen_mcp_schema::filesystem::{ListSearchesArgs, ListSearchesPromptArgs};
+use kodegen_mcp_schema::filesystem::{FsListSearchesArgs, FsListSearchesPromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::json;
 use std::sync::Arc;
 
 // ============================================================================
@@ -27,11 +27,11 @@ impl ListSearchesTool {
 // ============================================================================
 
 impl Tool for ListSearchesTool {
-    type Args = ListSearchesArgs;
-    type PromptArgs = ListSearchesPromptArgs;
+    type Args = FsListSearchesArgs;
+    type PromptArgs = FsListSearchesPromptArgs;
 
     fn name() -> &'static str {
-        "list_searches"
+        "fs_list_searches"
     }
 
     fn description() -> &'static str {
@@ -53,14 +53,42 @@ impl Tool for ListSearchesTool {
         false
     }
 
-    async fn execute(&self, _args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, _args: Self::Args) -> Result<Vec<Content>, McpError> {
         let sessions = self.search_manager.list_active_sessions().await;
 
-        // Return structured JSON response
-        Ok(json!({
+        let mut contents = Vec::new();
+
+        // Content 1: Human-readable summary
+        let count = sessions.len();
+        let mut summary = format!("🔍 Active searches ({} session{})\n", count, if count == 1 { "" } else { "s" });
+        
+        if sessions.is_empty() {
+            summary.push_str("\nNo active search sessions.");
+        } else {
+            summary.push('\n');
+            for session in &sessions {
+                let status = if session.is_complete { "completed" } else { "running" };
+                let runtime_sec = session.runtime_ms as f64 / 1000.0;
+                
+                summary.push_str(&format!(
+                    "[{}] {} search \"{}\" ({}, {:.1}s, {} results)\n",
+                    session.id, session.search_type, session.pattern, status, runtime_sec, session.total_results
+                ));
+            }
+        }
+        contents.push(Content::text(summary));
+
+        // Content 2: JSON metadata
+        let metadata = json!({
+            "success": true,
             "sessions": sessions,
-            "count": sessions.len(),
-        }))
+            "count": count,
+        });
+        let json_str = serde_json::to_string_pretty(&metadata)
+            .unwrap_or_else(|_| "{}".to_string());
+        contents.push(Content::text(json_str));
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

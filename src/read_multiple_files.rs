@@ -1,9 +1,9 @@
 use crate::ReadFileTool;
 use futures::future;
-use kodegen_mcp_schema::filesystem::{ReadMultipleFilesArgs, ReadMultipleFilesPromptArgs};
+use kodegen_mcp_schema::filesystem::{FsReadMultipleFilesArgs, FsReadMultipleFilesPromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -61,9 +61,9 @@ impl ReadMultipleFilesTool {
         offset: i64,
         length: Option<usize>,
     ) -> MultiFileResult {
-        use kodegen_mcp_schema::filesystem::ReadFileArgs;
+        use kodegen_mcp_schema::filesystem::FsReadFileArgs;
 
-        let args = ReadFileArgs {
+        let args = FsReadFileArgs {
             path: path.clone(),
             offset,
             length,
@@ -71,19 +71,49 @@ impl ReadMultipleFilesTool {
         };
 
         match self.read_file_tool.execute(args).await {
-            Ok(result) => {
-                // Extract fields from the JSON result
+            Ok(contents) => {
+                // Parse the JSON metadata (second Content item)
+                if contents.len() >= 2
+                    && let Some(json_content) = contents.get(1)
+                    && let rmcp::model::RawContent::Text(text_content) = &json_content.raw
+                    && let Ok(result) = serde_json::from_str::<Value>(&text_content.text)
+                {
+                    return MultiFileResult {
+                        path,
+                        content: result
+                            .get("content")
+                            .and_then(|v| v.as_str())
+                            .map(String::from)
+                            .or_else(|| {
+                                contents.first().and_then(|c| {
+                                    if let rmcp::model::RawContent::Text(text_content) = &c.raw {
+                                        Some(text_content.text.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                            }),
+                        mime_type: result
+                            .get("mime_type")
+                            .and_then(|v| v.as_str())
+                            .map(String::from),
+                        is_image: result.get("is_image").and_then(serde_json::Value::as_bool),
+                        error: None,
+                    };
+                }
+                
+                // Fallback if parsing fails
                 MultiFileResult {
                     path,
-                    content: result
-                        .get("content")
-                        .and_then(|v| v.as_str())
-                        .map(String::from),
-                    mime_type: result
-                        .get("mime_type")
-                        .and_then(|v| v.as_str())
-                        .map(String::from),
-                    is_image: result.get("is_image").and_then(serde_json::Value::as_bool),
+                    content: contents.first().and_then(|c| {
+                        if let rmcp::model::RawContent::Text(text_content) = &c.raw {
+                            Some(text_content.text.clone())
+                        } else {
+                            None
+                        }
+                    }),
+                    mime_type: None,
+                    is_image: None,
                     error: None,
                 }
             }
@@ -103,11 +133,11 @@ impl ReadMultipleFilesTool {
 // ============================================================================
 
 impl Tool for ReadMultipleFilesTool {
-    type Args = ReadMultipleFilesArgs;
-    type PromptArgs = ReadMultipleFilesPromptArgs;
+    type Args = FsReadMultipleFilesArgs;
+    type PromptArgs = FsReadMultipleFilesPromptArgs;
 
     fn name() -> &'static str {
-        "read_multiple_files"
+        "fs_read_multiple_files"
     }
 
     fn description() -> &'static str {
@@ -125,7 +155,7 @@ impl Tool for ReadMultipleFilesTool {
         false // Only reads local files, not URLs
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         if args.paths.is_empty() {
             return Err(McpError::InvalidArguments(
                 "No paths provided. Please provide at least one file path.".to_string(),
@@ -146,14 +176,49 @@ impl Tool for ReadMultipleFilesTool {
         let successful = results.iter().filter(|r| r.error.is_none()).count();
         let failed = total - successful;
 
-        Ok(json!({
-            "results": results,
-            "summary": {
-                "total": total,
-                "successful": successful,
-                "failed": failed
+        let mut contents = Vec::new();
+
+        // ========================================
+        // Content[0]: Human-Readable Summary
+        // ========================================
+        let mut summary_lines = vec![format!(
+            "📚 Read {} files ({} successful, {} failed)\n",
+            total, successful, failed
+        )];
+
+        for result in &results {
+            if result.error.is_none() {
+                let lines_info = if let Some(content) = &result.content {
+                    let line_count = content.lines().count();
+                    format!(" ({} lines)", line_count)
+                } else {
+                    String::new()
+                };
+                summary_lines.push(format!("✓ {}{}", result.path, lines_info));
+            } else {
+                let error_msg = result.error.as_ref().unwrap();
+                summary_lines.push(format!("✗ {} ({})", result.path, error_msg));
             }
-        }))
+        }
+
+        let summary = summary_lines.join("\n");
+        contents.push(Content::text(summary));
+
+        // ========================================
+        // Content[1]: Machine-Parseable JSON
+        // ========================================
+        let metadata = json!({
+            "success": true,
+            "total_files": total,
+            "successful": successful,
+            "failed": failed,
+            "results": results
+        });
+        let json_str = serde_json::to_string_pretty(&metadata)
+            .unwrap_or_else(|_| "{}".to_string());
+        contents.push(Content::text(json_str));
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

@@ -1,9 +1,9 @@
 use crate::validate_path;
-use kodegen_mcp_schema::filesystem::{GetFileInfoArgs, GetFileInfoPromptArgs};
+use kodegen_mcp_schema::filesystem::{FsGetFileInfoArgs, FsGetFileInfoPromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::json;
 use std::time::SystemTime;
 use tokio::fs;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -52,11 +52,11 @@ impl GetFileInfoTool {
 // ============================================================================
 
 impl Tool for GetFileInfoTool {
-    type Args = GetFileInfoArgs;
-    type PromptArgs = GetFileInfoPromptArgs;
+    type Args = FsGetFileInfoArgs;
+    type PromptArgs = FsGetFileInfoPromptArgs;
 
     fn name() -> &'static str {
-        "get_file_info"
+        "fs_get_file_info"
     }
 
     fn description() -> &'static str {
@@ -69,7 +69,7 @@ impl Tool for GetFileInfoTool {
         true
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
         let stats = fs::metadata(&valid_path).await?;
 
@@ -90,21 +90,30 @@ impl Tool for GetFileInfoTool {
         });
 
         // Platform-specific permissions
+        let perms_str;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            info["permissions"] = json!(format!("{:o}", stats.permissions().mode() & 0o777));
+            perms_str = format!("{:o}", stats.permissions().mode() & 0o777);
+            info["permissions"] = json!(&perms_str);
         }
 
         #[cfg(windows)]
         {
+            perms_str = if stats.permissions().readonly() {
+                "readonly".to_string()
+            } else {
+                "read-write".to_string()
+            };
             info["readonly"] = json!(stats.permissions().readonly());
         }
 
         // For text files under 10MB, calculate line count using streaming
+        let mut line_count_opt = None;
         if stats.is_file() && stats.len() < 10 * 1024 * 1024 {
             match count_lines_streaming(&valid_path).await {
                 Ok(line_count) => {
+                    line_count_opt = Some(line_count);
                     info["line_count"] = json!(line_count);
                     if line_count > 0 {
                         info["last_line"] = json!(line_count - 1); // zero-indexed
@@ -117,7 +126,65 @@ impl Tool for GetFileInfoTool {
             }
         }
 
-        Ok(info)
+        let mut contents = Vec::new();
+
+        // ========================================
+        // Content[0]: Human-Readable Summary
+        // ========================================
+        let emoji = if stats.is_dir() { "📁" } else { "📄" };
+        let type_str = if stats.is_dir() {
+            "Directory"
+        } else {
+            "File"
+        };
+
+        let size_kb = stats.len() as f64 / 1024.0;
+        let size_str = if size_kb < 1024.0 {
+            format!("{:.1} KB", size_kb)
+        } else {
+            format!("{:.1} MB", size_kb / 1024.0)
+        };
+
+        let time_str = if modified_secs_ago < 60 {
+            format!("{} seconds ago", modified_secs_ago)
+        } else if modified_secs_ago < 3600 {
+            format!("{} minutes ago", modified_secs_ago / 60)
+        } else if modified_secs_ago < 86400 {
+            format!("{} hours ago", modified_secs_ago / 3600)
+        } else {
+            format!("{} days ago", modified_secs_ago / 86400)
+        };
+
+        let mut summary = format!(
+            "{} {} Info: {}\n\nType: {}\nSize: {}",
+            emoji,
+            type_str,
+            valid_path.display(),
+            type_str,
+            size_str
+        );
+
+        if let Some(lc) = line_count_opt {
+            summary.push_str(&format!(" ({} lines)", lc));
+        }
+
+        summary.push_str(&format!("\nModified: {}\n", time_str));
+
+        if !perms_str.is_empty() {
+            summary.push_str(&format!("Permissions: {}", perms_str));
+        }
+
+        contents.push(Content::text(summary));
+
+        // ========================================
+        // Content[1]: Machine-Parseable JSON
+        // ========================================
+        info["success"] = json!(true);
+        let json_str = serde_json::to_string_pretty(&info)
+            .unwrap_or_else(|_| "{}".to_string());
+        contents.push(Content::text(json_str));
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

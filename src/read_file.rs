@@ -1,10 +1,10 @@
 use crate::validate_path;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use kodegen_mcp_schema::filesystem::{ReadFileArgs, ReadFilePromptArgs};
+use kodegen_mcp_schema::filesystem::{FsReadFileArgs, FsReadFilePromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
 use mime_guess::from_path;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use serde_json::{Value, json};
 use std::collections::VecDeque;
 use tokio::fs;
@@ -284,11 +284,11 @@ impl ReadFileTool {
 // ============================================================================
 
 impl Tool for ReadFileTool {
-    type Args = ReadFileArgs;
-    type PromptArgs = ReadFilePromptArgs;
+    type Args = FsReadFileArgs;
+    type PromptArgs = FsReadFilePromptArgs;
 
     fn name() -> &'static str {
-        "read_file"
+        "fs_read_file"
     }
 
     fn description() -> &'static str {
@@ -306,17 +306,82 @@ impl Tool for ReadFileTool {
         true // Can read from URLs
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         // Auto-detect URL if not specified
         let is_url =
             args.is_url || args.path.starts_with("http://") || args.path.starts_with("https://");
 
-        if is_url {
-            self.read_file_from_url(&args.path).await
+        // Get result from helper
+        let result = if is_url {
+            self.read_file_from_url(&args.path).await?
         } else {
             self.read_file_from_disk(&args.path, args.offset, args.length)
-                .await
-        }
+                .await?
+        };
+
+        // Extract fields from JSON result
+        let content = result["content"].as_str().unwrap_or("");
+        let mime_type = result["mime_type"].as_str().unwrap_or("unknown");
+        let is_image = result["is_image"].as_bool().unwrap_or(false);
+        let size_bytes = result["size_bytes"].as_u64();
+        let total_lines = result["total_lines"].as_u64();
+        let lines_read = result["lines_read"].as_u64();
+        let is_partial = result["is_partial"].as_bool().unwrap_or(false);
+
+        let mut contents = Vec::new();
+
+        // ========================================
+        // Content[0]: Human-Readable Summary
+        // ========================================
+        let summary = if is_image {
+            // For images: summary describes the image
+            let size_kb = size_bytes.map_or(0.0, |b| b as f64 / 1024.0);
+            format!(
+                "🖼️  Read image: {}\nFormat: {}\nSize: {:.1} KB",
+                args.path, mime_type, size_kb
+            )
+        } else if let Some(total) = total_lines {
+            // For text files: include the content with header
+            let read = lines_read.unwrap_or(0);
+            if is_partial {
+                format!(
+                    "📄 Read {} lines from {} (line {}-{} of {} total)\n\n{}",
+                    read,
+                    args.path,
+                    args.offset.max(0),
+                    args.offset.max(0) as u64 + read,
+                    total,
+                    content
+                )
+            } else {
+                format!("📄 Read file: {}\n\n{}", args.path, content)
+            }
+        } else {
+            // Fallback for text files without line count
+            format!("📄 Read file: {}\n\n{}", args.path, content)
+        };
+        contents.push(Content::text(summary));
+
+        // ========================================
+        // Content[1]: Machine-Parseable JSON
+        // ========================================
+        let metadata = json!({
+            "success": true,
+            "path": args.path,
+            "mime_type": mime_type,
+            "is_image": is_image,
+            "size_bytes": size_bytes,
+            "total_lines": total_lines,
+            "lines_read": lines_read,
+            "is_partial": is_partial,
+            "offset": args.offset,
+            "length": args.length
+        });
+        let json_str = serde_json::to_string_pretty(&metadata)
+            .unwrap_or_else(|_| "{}".to_string());
+        contents.push(Content::text(json_str));
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {
@@ -336,19 +401,19 @@ impl Tool for ReadFileTool {
             PromptMessage {
                 role: PromptMessageRole::User,
                 content: PromptMessageContent::text(
-                    "How do I use the read_file tool to read a large file in chunks?",
+                    "How do I use the fs_read_file tool to read a large file in chunks?",
                 ),
             },
             PromptMessage {
                 role: PromptMessageRole::Assistant,
                 content: PromptMessageContent::text(
-                    "The read_file tool supports reading large files in chunks using offset and length parameters:\n\n\
-                     1. Basic usage: read_file({\"path\": \"file.txt\"})\n\
-                     2. Read first 100 lines: read_file({\"path\": \"file.txt\", \"length\": 100})\n\
-                     3. Read lines 100-200: read_file({\"path\": \"file.txt\", \"offset\": 100, \"length\": 100})\n\
-                     4. Read last 30 lines: read_file({\"path\": \"file.txt\", \"offset\": -30})\n\
-                     5. Read last 5 lines: read_file({\"path\": \"file.txt\", \"offset\": -5})\n\
-                     6. Read from URL: read_file({\"path\": \"https://example.com/data.json\", \"is_url\": true})\n\n\
+                    "The fs_read_file tool supports reading large files in chunks using offset and length parameters:\n\n\
+                     1. Basic usage: fs_read_file({\"path\": \"file.txt\"})\n\
+                     2. Read first 100 lines: fs_read_file({\"path\": \"file.txt\", \"length\": 100})\n\
+                     3. Read lines 100-200: fs_read_file({\"path\": \"file.txt\", \"offset\": 100, \"length\": 100})\n\
+                     4. Read last 30 lines: fs_read_file({\"path\": \"file.txt\", \"offset\": -30})\n\
+                     5. Read last 5 lines: fs_read_file({\"path\": \"file.txt\", \"offset\": -5})\n\
+                     6. Read from URL: fs_read_file({\"path\": \"https://example.com/data.json\", \"is_url\": true})\n\n\
                      The tool automatically:\n\
                      - Detects and validates file paths (expands ~, resolves symlinks)\n\
                      - Detects image files and returns them as base64\n\

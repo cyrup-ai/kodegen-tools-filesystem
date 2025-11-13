@@ -1,10 +1,10 @@
 use crate::validate_path;
-use kodegen_mcp_schema::filesystem::{ListDirectoryArgs, ListDirectoryPromptArgs};
+use kodegen_mcp_schema::filesystem::{FsListDirectoryArgs, FsListDirectoryPromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
 use log::warn;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::json;
 use tokio::fs;
 
 // ============================================================================
@@ -28,11 +28,11 @@ impl ListDirectoryTool {
 // ============================================================================
 
 impl Tool for ListDirectoryTool {
-    type Args = ListDirectoryArgs;
-    type PromptArgs = ListDirectoryPromptArgs;
+    type Args = FsListDirectoryArgs;
+    type PromptArgs = FsListDirectoryPromptArgs;
 
     fn name() -> &'static str {
-        "list_directory"
+        "fs_list_directory"
     }
 
     fn description() -> &'static str {
@@ -45,7 +45,7 @@ impl Tool for ListDirectoryTool {
         true
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
 
         let mut entries = fs::read_dir(&valid_path).await?;
@@ -76,7 +76,7 @@ impl Tool for ListDirectoryTool {
             };
 
             if is_dir {
-                items.push(format!("[DIR] {name}"));
+                items.push(format!("[DIR]  {name}"));
                 dir_count += 1;
             } else {
                 items.push(format!("[FILE] {name}"));
@@ -87,13 +87,51 @@ impl Tool for ListDirectoryTool {
         // Sort for consistent output
         items.sort();
 
-        Ok(json!({
+        let mut contents = Vec::new();
+
+        // ========================================
+        // Content[0]: Human-Readable Summary
+        // ========================================
+        let total = items.len();
+        let truncated = total > 50;
+        let display_items = if truncated {
+            &items[..50]
+        } else {
+            &items[..]
+        };
+
+        let mut summary = format!(
+            "📁 Listed {}\n\nContents ({} items):\n- {} directories\n- {} files\n\n{}",
+            valid_path.display(),
+            total,
+            dir_count,
+            file_count,
+            display_items.join("\n")
+        );
+
+        if truncated {
+            summary.push_str(&format!("\n... ({} more items not shown)", total - 50));
+        }
+
+        contents.push(Content::text(summary));
+
+        // ========================================
+        // Content[1]: Machine-Parseable JSON
+        // ========================================
+        let metadata = json!({
+            "success": true,
             "path": valid_path.to_string_lossy(),
+            "total": total,
+            "directories": dir_count,
+            "files": file_count,
             "entries": items,
-            "total_items": items.len(),
-            "directory_count": dir_count,
-            "file_count": file_count
-        }))
+            "truncated": truncated
+        });
+        let json_str = serde_json::to_string_pretty(&metadata)
+            .unwrap_or_else(|_| "{}".to_string());
+        contents.push(Content::text(json_str));
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

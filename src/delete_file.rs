@@ -1,9 +1,9 @@
 use crate::validate_path;
-use kodegen_mcp_schema::filesystem::{DeleteFileArgs, DeleteFilePromptArgs};
+use kodegen_mcp_schema::filesystem::{FsDeleteFileArgs, FsDeleteFilePromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::json;
 use tokio::fs;
 
 #[derive(Clone)]
@@ -19,11 +19,11 @@ impl DeleteFileTool {
 }
 
 impl Tool for DeleteFileTool {
-    type Args = DeleteFileArgs;
-    type PromptArgs = DeleteFilePromptArgs;
+    type Args = FsDeleteFileArgs;
+    type PromptArgs = FsDeleteFilePromptArgs;
 
     fn name() -> &'static str {
-        "delete_file"
+        "fs_delete_file"
     }
 
     fn description() -> &'static str {
@@ -43,7 +43,7 @@ impl Tool for DeleteFileTool {
         false // Deleting twice will fail (file no longer exists)
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
 
         // Check file type (errors propagate naturally)
@@ -57,11 +57,22 @@ impl Tool for DeleteFileTool {
 
         fs::remove_file(&valid_path).await?;
 
-        Ok(json!({
+        let mut contents = Vec::new();
+
+        // Human summary
+        let summary = format!("✓ Deleted file {}", valid_path.display());
+        contents.push(Content::text(summary));
+
+        // JSON metadata
+        let metadata = json!({
             "success": true,
-            "path": valid_path.to_string_lossy(),
-            "message": "File deleted successfully"
-        }))
+            "path": valid_path.to_string_lossy()
+        });
+        let json_str = serde_json::to_string_pretty(&metadata)
+            .unwrap_or_else(|_| "{}".to_string());
+        contents.push(Content::text(json_str));
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

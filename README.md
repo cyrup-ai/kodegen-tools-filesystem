@@ -91,20 +91,20 @@ The server exposes 14 MCP tools:
 
 | Category | Tool | Description |
 |----------|------|-------------|
-| File Ops | `read_file` | Read file contents with offset/length support |
-| | `read_multiple_files` | Batch read multiple files |
-| | `write_file` | Write or append to files |
-| | `edit_block` | Replace text blocks surgically |
-| | `move_file` | Move or rename files |
-| | `delete_file` | Delete files |
-| | `get_file_info` | Get file metadata |
-| Directory | `create_directory` | Create directories recursively |
-| | `list_directory` | List directory contents with depth |
-| | `delete_directory` | Delete directories recursively |
-| Search | `start_search` | Start file or content search |
-| | `get_search_results` | Paginate search results |
-| | `stop_search` | Cancel active search |
-| | `list_searches` | List active search sessions |
+| File Ops | `fs_read_file` | Read file contents with offset/length support |
+| | `fs_read_multiple_files` | Batch read multiple files |
+| | `fs_write_file` | Write or append to files |
+| | `fs_edit_block` | Replace text blocks surgically |
+| | `fs_move_file` | Move or rename files |
+| | `fs_delete_file` | Delete files |
+| | `fs_get_file_info` | Get file metadata |
+| Directory | `fs_create_directory` | Create directories recursively |
+| | `fs_list_directory` | List directory contents with depth |
+| | `fs_delete_directory` | Delete directories recursively |
+| Search | `fs_start_search` | Start file or content search |
+| | `fs_get_search_results` | Paginate search results |
+| | `fs_stop_search` | Cancel active search |
+| | `fs_list_searches` | List active search sessions |
 
 ## Examples
 

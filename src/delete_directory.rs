@@ -1,9 +1,9 @@
 use crate::validate_path;
-use kodegen_mcp_schema::filesystem::{DeleteDirectoryArgs, DeleteDirectoryPromptArgs};
+use kodegen_mcp_schema::filesystem::{FsDeleteDirectoryArgs, FsDeleteDirectoryPromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::json;
 use tokio::fs;
 
 #[derive(Clone)]
@@ -19,11 +19,11 @@ impl DeleteDirectoryTool {
 }
 
 impl Tool for DeleteDirectoryTool {
-    type Args = DeleteDirectoryArgs;
-    type PromptArgs = DeleteDirectoryPromptArgs;
+    type Args = FsDeleteDirectoryArgs;
+    type PromptArgs = FsDeleteDirectoryPromptArgs;
 
     fn name() -> &'static str {
-        "delete_directory"
+        "fs_delete_directory"
     }
 
     fn description() -> &'static str {
@@ -43,7 +43,7 @@ impl Tool for DeleteDirectoryTool {
         false // Deleting twice will fail
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         // Safety check: require explicit recursive flag
         if !args.recursive {
             return Err(McpError::InvalidArguments(
@@ -64,11 +64,23 @@ impl Tool for DeleteDirectoryTool {
 
         fs::remove_dir_all(&valid_path).await?;
 
-        Ok(json!({
+        let mut contents = Vec::new();
+
+        // Human summary
+        let summary = format!("✓ Deleted directory {} (recursive)", valid_path.display());
+        contents.push(Content::text(summary));
+
+        // JSON metadata
+        let metadata = json!({
             "success": true,
             "path": valid_path.to_string_lossy(),
-            "message": "Directory and all contents deleted successfully"
-        }))
+            "recursive": true
+        });
+        let json_str = serde_json::to_string_pretty(&metadata)
+            .unwrap_or_else(|_| "{}".to_string());
+        contents.push(Content::text(json_str));
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

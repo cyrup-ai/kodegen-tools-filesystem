@@ -1,9 +1,9 @@
 use super::manager::SearchManager;
-use kodegen_mcp_schema::filesystem::{GetMoreSearchResultsArgs, GetMoreSearchResultsPromptArgs};
+use kodegen_mcp_schema::filesystem::{FsGetMoreSearchResultsArgs, FsGetMoreSearchResultsPromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::json;
 use std::sync::Arc;
 
 // ============================================================================
@@ -27,11 +27,11 @@ impl GetMoreSearchResultsTool {
 // ============================================================================
 
 impl Tool for GetMoreSearchResultsTool {
-    type Args = GetMoreSearchResultsArgs;
-    type PromptArgs = GetMoreSearchResultsPromptArgs;
+    type Args = FsGetMoreSearchResultsArgs;
+    type PromptArgs = FsGetMoreSearchResultsPromptArgs;
 
     fn name() -> &'static str {
-        "get_search_results"
+        "fs_get_search_results"
     }
 
     fn description() -> &'static str {
@@ -57,14 +57,60 @@ impl Tool for GetMoreSearchResultsTool {
         true
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         let response = self
             .manager
             .get_results(&args.session_id, args.offset, args.length)
             .await?;
 
-        // Return structured JSON response
-        Ok(json!({
+        let mut contents = Vec::new();
+
+        // Content 1: Human-readable summary
+        let status = if response.is_complete {
+            if response.is_error {
+                "failed"
+            } else {
+                "completed"
+            }
+        } else {
+            "running"
+        };
+
+        let mut summary = format!(
+            "🔍 Search results ({} matches from session: {})\n\nStatus: {}\nReturned: {} of {} total results",
+            response.total_matches,
+            response.session_id,
+            status,
+            response.returned_count,
+            response.total_results
+        );
+
+        if response.returned_count > 0 {
+            summary.push_str("\n\nResults:\n");
+            for (i, result) in response.results.iter().take(10).enumerate() {
+                if let Some(line) = result.line {
+                    summary.push_str(&format!("{}. {}:{}\n", i + 1, result.file, line));
+                } else {
+                    summary.push_str(&format!("{}. {}\n", i + 1, result.file));
+                }
+            }
+            if response.returned_count > 10 {
+                summary.push_str(&format!("\n... ({} more results not shown)", response.returned_count - 10));
+            }
+        }
+
+        if response.has_more_results {
+            summary.push_str(&format!(
+                "\n\n▶ More results available. Use offset={} to continue.",
+                args.offset + response.returned_count as i64
+            ));
+        }
+
+        contents.push(Content::text(summary));
+
+        // Content 2: JSON metadata
+        let metadata = json!({
+            "success": true,
             "session_id": response.session_id,
             "results": response.results,
             "returned_count": response.returned_count,
@@ -79,7 +125,12 @@ impl Tool for GetMoreSearchResultsTool {
             "error_count": response.error_count,
             "errors": response.errors,
             "results_limited": response.results_limited,
-        }))
+        });
+        let json_str = serde_json::to_string_pretty(&metadata)
+            .unwrap_or_else(|_| "{}".to_string());
+        contents.push(Content::text(json_str));
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

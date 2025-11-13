@@ -1,9 +1,9 @@
 use crate::validate_path;
-use kodegen_mcp_schema::filesystem::{MoveFileArgs, MoveFilePromptArgs};
+use kodegen_mcp_schema::filesystem::{FsMoveFileArgs, FsMoveFilePromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::json;
 use tokio::fs;
 
 #[derive(Clone)]
@@ -19,11 +19,11 @@ impl MoveFileTool {
 }
 
 impl Tool for MoveFileTool {
-    type Args = MoveFileArgs;
-    type PromptArgs = MoveFilePromptArgs;
+    type Args = FsMoveFileArgs;
+    type PromptArgs = FsMoveFilePromptArgs;
 
     fn name() -> &'static str {
-        "move_file"
+        "fs_move_file"
     }
 
     fn description() -> &'static str {
@@ -43,18 +43,33 @@ impl Tool for MoveFileTool {
         false // Moving twice would fail (source no longer exists)
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         let source_path = validate_path(&args.source, &self.config_manager).await?;
         let dest_path = validate_path(&args.destination, &self.config_manager).await?;
 
         fs::rename(&source_path, &dest_path).await?;
 
-        Ok(json!({
+        let mut contents = Vec::new();
+
+        // Human summary
+        let summary = format!(
+            "✓ Moved {} → {}",
+            source_path.display(),
+            dest_path.display()
+        );
+        contents.push(Content::text(summary));
+
+        // JSON metadata
+        let metadata = json!({
             "success": true,
             "source": source_path.to_string_lossy(),
-            "destination": dest_path.to_string_lossy(),
-            "message": "File moved successfully"
-        }))
+            "destination": dest_path.to_string_lossy()
+        });
+        let json_str = serde_json::to_string_pretty(&metadata)
+            .unwrap_or_else(|_| "{}".to_string());
+        contents.push(Content::text(json_str));
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

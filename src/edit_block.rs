@@ -1,6 +1,6 @@
 use crate::validate_path;
 use chrono::Utc;
-use kodegen_mcp_schema::filesystem::{EditBlockArgs, EditBlockPromptArgs};
+use kodegen_mcp_schema::filesystem::{FsEditBlockArgs, FsEditBlockPromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
 use kodegen_utils::char_analysis::CharCodeData;
@@ -10,8 +10,8 @@ use kodegen_utils::fuzzy_logger::{FuzzySearchLogEntry, get_logger};
 use kodegen_utils::fuzzy_search::{get_similarity_ratio, recursive_fuzzy_index_of_with_defaults};
 use kodegen_utils::line_endings::{detect_line_ending, normalize_line_endings};
 use kodegen_utils::suggestions::{EditFailureReason, Suggestion, SuggestionContext};
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::json;
 use std::time::Instant;
 use tokio::fs;
 
@@ -36,11 +36,11 @@ impl EditBlockTool {
 // ============================================================================
 
 impl Tool for EditBlockTool {
-    type Args = EditBlockArgs;
-    type PromptArgs = EditBlockPromptArgs;
+    type Args = FsEditBlockArgs;
+    type PromptArgs = FsEditBlockPromptArgs;
 
     fn name() -> &'static str {
-        "edit_block"
+        "fs_edit_block"
     }
 
     fn description() -> &'static str {
@@ -62,7 +62,7 @@ impl Tool for EditBlockTool {
         false // Each replacement changes content
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         let start_time = Instant::now(); // START TIMER
 
         // Validate inputs
@@ -325,20 +325,43 @@ impl Tool for EditBlockTool {
 
         if occurrence_count == args.expected_replacements {
             // Exact match - success
-            Ok(json!({
+            let mut contents = Vec::new();
+
+            // Human summary
+            let delta = args.new_string.len() as i64 - args.old_string.len() as i64;
+            let delta_str = if delta >= 0 {
+                format!("+{}", delta)
+            } else {
+                format!("{}", delta)
+            };
+            let summary = format!(
+                "✓ Made {} replacement(s) in {}\n\nOld: {} bytes\nNew: {} bytes\nDelta: {} bytes{}",
+                occurrence_count,
+                args.file_path,
+                args.old_string.len(),
+                args.new_string.len(),
+                delta_str,
+                warning
+            );
+            contents.push(Content::text(summary));
+
+            // JSON metadata
+            let metadata = json!({
                 "success": true,
-                "message": format!(
-                    "Successfully replaced {} occurrence(s) of the target string in {}{}",
-                    args.expected_replacements,
-                    args.file_path,
-                    warning
-                ),
-                "replacements_made": occurrence_count,
-                "expected": args.expected_replacements,
-                "file_extension": extension,
-                "old_string_length": args.old_string.len(),
-                "new_string_length": args.new_string.len()
-            }))
+                "file_path": args.file_path,
+                "replacements": occurrence_count,
+                "old_bytes": args.old_string.len(),
+                "new_bytes": args.new_string.len(),
+                "delta_bytes": delta,
+                "expected_replacements": args.expected_replacements,
+                "matched_expected": true,
+                "file_extension": extension
+            });
+            let json_str = serde_json::to_string_pretty(&metadata)
+                .unwrap_or_else(|_| "{}".to_string());
+            contents.push(Content::text(json_str));
+
+            Ok(contents)
         } else {
             // Mismatch - success with warning and suggestions
             let context = SuggestionContext {
@@ -358,21 +381,47 @@ impl Tool for EditBlockTool {
             );
 
             // Return success with warning and suggestions
-            Ok(json!({
+            let mut contents = Vec::new();
+
+            // Human summary with warning
+            let delta = args.new_string.len() as i64 - args.old_string.len() as i64;
+            let delta_str = if delta >= 0 {
+                format!("+{}", delta)
+            } else {
+                format!("{}", delta)
+            };
+            let summary = format!(
+                "⚠️  Made {} replacement(s) in {} (expected {})\n\nOld: {} bytes\nNew: {} bytes\nDelta: {} bytes\n\n{}\n{}{}",
+                occurrence_count,
+                args.file_path,
+                args.expected_replacements,
+                args.old_string.len(),
+                args.new_string.len(),
+                delta_str,
+                suggestion.message,
+                suggestion.format(),
+                warning
+            );
+            contents.push(Content::text(summary));
+
+            // JSON metadata
+            let metadata = json!({
                 "success": true,
-                "warning": format!(
-                    "{}\nAll {} occurrence(s) were replaced.{}{}",
-                    suggestion.message,
-                    occurrence_count,
-                    suggestion.format(),
-                    warning
-                ),
-                "replacements_made": occurrence_count,
-                "expected": args.expected_replacements,
-                "file_extension": extension,
-                "old_string_length": args.old_string.len(),
-                "new_string_length": args.new_string.len()
-            }))
+                "file_path": args.file_path,
+                "replacements": occurrence_count,
+                "old_bytes": args.old_string.len(),
+                "new_bytes": args.new_string.len(),
+                "delta_bytes": delta,
+                "expected_replacements": args.expected_replacements,
+                "matched_expected": false,
+                "warning": suggestion.message,
+                "file_extension": extension
+            });
+            let json_str = serde_json::to_string_pretty(&metadata)
+                .unwrap_or_else(|_| "{}".to_string());
+            contents.push(Content::text(json_str));
+
+            Ok(contents)
         }
     }
 

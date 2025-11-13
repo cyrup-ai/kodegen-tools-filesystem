@@ -1,9 +1,9 @@
 use crate::validate_path;
-use kodegen_mcp_schema::filesystem::{WriteFileArgs, WriteFilePromptArgs};
+use kodegen_mcp_schema::filesystem::{FsWriteFileArgs, FsWriteFilePromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::json;
 use tokio::fs;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
@@ -29,11 +29,11 @@ impl WriteFileTool {
 // ============================================================================
 
 impl Tool for WriteFileTool {
-    type Args = WriteFileArgs;
-    type PromptArgs = WriteFilePromptArgs;
+    type Args = FsWriteFileArgs;
+    type PromptArgs = FsWriteFilePromptArgs;
 
     fn name() -> &'static str {
-        "write_file"
+        "fs_write_file"
     }
 
     fn description() -> &'static str {
@@ -54,7 +54,7 @@ impl Tool for WriteFileTool {
         false // Each write changes the file
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
 
         // Create parent directories if needed
@@ -83,14 +83,42 @@ impl Tool for WriteFileTool {
             fs::write(&valid_path, args.content).await?;
         }
 
-        Ok(json!({
+        let mut contents = Vec::new();
+
+        // ========================================
+        // Content[0]: Human-Readable Summary
+        // ========================================
+        let verb = if args.mode == "append" {
+            "Appended"
+        } else {
+            "Wrote"
+        };
+        let summary = format!(
+            "✓ {} {} bytes to {} ({} lines)\nMode: {}",
+            verb,
+            content_bytes,
+            valid_path.display(),
+            line_count,
+            args.mode
+        );
+        contents.push(Content::text(summary));
+
+        // ========================================
+        // Content[1]: Machine-Parseable JSON
+        // ========================================
+        let metadata = json!({
             "success": true,
             "path": valid_path.to_string_lossy(),
             "mode": args.mode,
             "bytes_written": content_bytes,
             "lines_written": line_count,
             "file_extension": extension
-        }))
+        });
+        let json_str = serde_json::to_string_pretty(&metadata)
+            .unwrap_or_else(|_| "{}".to_string());
+        contents.push(Content::text(json_str));
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {
@@ -107,15 +135,15 @@ impl Tool for WriteFileTool {
             PromptMessage {
                 role: PromptMessageRole::User,
                 content: PromptMessageContent::text(
-                    "How do I use write_file to safely write and append to files?",
+                    "How do I use fs_write_file to safely write and append to files?",
                 ),
             },
             PromptMessage {
                 role: PromptMessageRole::Assistant,
                 content: PromptMessageContent::text(
-                    "The write_file tool supports two modes:\n\n\
-                     1. Rewrite mode (default): write_file({\"path\": \"file.txt\", \"content\": \"new content\"})\n\
-                     2. Append mode: write_file({\"path\": \"file.txt\", \"content\": \"more content\", \"mode\": \"append\"})\n\n\
+                    "The fs_write_file tool supports two modes:\n\n\
+                     1. Rewrite mode (default): fs_write_file({\"path\": \"file.txt\", \"content\": \"new content\"})\n\
+                     2. Append mode: fs_write_file({\"path\": \"file.txt\", \"content\": \"more content\", \"mode\": \"append\"})\n\n\
                      The tool automatically:\n\
                      - Validates and normalizes file paths\n\
                      - Creates parent directories if needed\n\

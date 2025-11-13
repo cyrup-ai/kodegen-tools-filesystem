@@ -1,9 +1,9 @@
 use super::SearchManager;
-use kodegen_mcp_schema::filesystem::{StopSearchArgs, StopSearchPromptArgs};
+use kodegen_mcp_schema::filesystem::{FsStopSearchArgs, FsStopSearchPromptArgs};
 use kodegen_mcp_tool::Tool;
 use kodegen_mcp_tool::error::McpError;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::json;
 use std::sync::Arc;
 
 // ============================================================================
@@ -27,11 +27,11 @@ impl StopSearchTool {
 // ============================================================================
 
 impl Tool for StopSearchTool {
-    type Args = StopSearchArgs;
-    type PromptArgs = StopSearchPromptArgs;
+    type Args = FsStopSearchArgs;
+    type PromptArgs = FsStopSearchPromptArgs;
 
     fn name() -> &'static str {
-        "stop_search"
+        "fs_stop_search"
     }
 
     fn description() -> &'static str {
@@ -55,27 +55,51 @@ impl Tool for StopSearchTool {
         false
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Value, McpError> {
+    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         let success = self.manager.terminate_search(&args.session_id).await?;
 
+        let mut contents = Vec::new();
+
         if success {
-            let session_id = &args.session_id;
-            Ok(json!({
-                "session_id": args.session_id,
+            // Content 1: Human-readable summary
+            let summary = format!(
+                "✓ Stopped search session: {}\n\nResults remain available for reading.",
+                args.session_id
+            );
+            contents.push(Content::text(summary));
+
+            // Content 2: JSON metadata
+            let metadata = json!({
                 "success": true,
-                "message": format!(
-                    "Search session {session_id} terminated successfully. \
-                     Results remain available for reading."
-                )
-            }))
-        } else {
-            let session_id = &args.session_id;
-            Ok(json!({
                 "session_id": args.session_id,
+                "message": format!(
+                    "Search session {} terminated successfully. Results remain available for reading.",
+                    args.session_id
+                )
+            });
+            let json_str = serde_json::to_string_pretty(&metadata)
+                .unwrap_or_else(|_| "{}".to_string());
+            contents.push(Content::text(json_str));
+        } else {
+            // Content 1: Human-readable summary (failure case)
+            let summary = format!(
+                "⚠️  Search session not found: {}\n\nSession may have already completed or been cleaned up.",
+                args.session_id
+            );
+            contents.push(Content::text(summary));
+
+            // Content 2: JSON metadata (failure case)
+            let metadata = json!({
                 "success": false,
-                "message": format!("Search session {session_id} not found or already completed.")
-            }))
+                "session_id": args.session_id,
+                "message": format!("Search session {} not found or already completed.", args.session_id)
+            });
+            let json_str = serde_json::to_string_pretty(&metadata)
+                .unwrap_or_else(|_| "{}".to_string());
+            contents.push(Content::text(json_str));
         }
+
+        Ok(contents)
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {
