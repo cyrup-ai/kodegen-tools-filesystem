@@ -61,9 +61,9 @@ pub async fn start_server(
     };
 
     let shutdown_timeout = Duration::from_secs(30);
-    let server_timeout = Duration::from_secs(30);
+    let session_keep_alive = Duration::ZERO;
 
-    create_http_server("filesystem", addr, tls_config, shutdown_timeout, server_timeout, |config: &kodegen_config_manager::ConfigManager, _tracker| {
+    create_http_server("filesystem", addr, tls_config, shutdown_timeout, session_keep_alive, |config: &kodegen_config_manager::ConfigManager, _tracker| {
         let config = config.clone();
         Box::pin(async move {
             let tool_router = ToolRouter::new();
