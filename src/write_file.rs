@@ -33,7 +33,7 @@ impl Tool for WriteFileTool {
     type PromptArgs = FsWriteFilePromptArgs;
 
     fn name() -> &'static str {
-        "fs_write_file"
+        kodegen_mcp_schema::filesystem::FS_WRITE_FILE
     }
 
     fn description() -> &'static str {

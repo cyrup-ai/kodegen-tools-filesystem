@@ -31,7 +31,7 @@ impl Tool for CreateDirectoryTool {
     type PromptArgs = FsCreateDirectoryPromptArgs;
 
     fn name() -> &'static str {
-        "fs_create_directory"
+        kodegen_mcp_schema::filesystem::FS_CREATE_DIRECTORY
     }
 
     fn description() -> &'static str {

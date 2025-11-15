@@ -40,7 +40,7 @@ impl Tool for EditBlockTool {
     type PromptArgs = FsEditBlockPromptArgs;
 
     fn name() -> &'static str {
-        "fs_edit_block"
+        kodegen_mcp_schema::filesystem::FS_EDIT_BLOCK
     }
 
     fn description() -> &'static str {

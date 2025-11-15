@@ -23,7 +23,7 @@ impl Tool for DeleteDirectoryTool {
     type PromptArgs = FsDeleteDirectoryPromptArgs;
 
     fn name() -> &'static str {
-        "fs_delete_directory"
+        kodegen_mcp_schema::filesystem::FS_DELETE_DIRECTORY
     }
 
     fn description() -> &'static str {

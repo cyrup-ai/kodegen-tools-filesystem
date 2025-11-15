@@ -32,11 +32,22 @@ impl Tool for StartSearchTool {
     type PromptArgs = FsStartSearchPromptArgs;
 
     fn name() -> &'static str {
-        "fs_start_search"
+        kodegen_mcp_schema::filesystem::FS_START_SEARCH
     }
 
     fn description() -> &'static str {
-        "Start a streaming search that can return results progressively.\n\n\
+        "🚀 BLAZING-FAST SEARCH (10-100x faster than grep). Respects .gitignore automatically. Built on ripgrep.\n\n\
+         QUICK START - Common patterns:\n\
+         • Find files by name:    fs_start_search(pattern='*.ts', search_type='files')\n\
+         • Find TODO comments:    fs_start_search(pattern='TODO', search_type='content')\n\
+         • Case-insensitive:      fs_start_search(pattern='error', case_mode='insensitive')\n\
+         • Find exact text:       fs_start_search(pattern='user_id', literal_search=true)\n\
+         • Search specific files: fs_start_search(pattern='auth', search_type='content', file_pattern='*.rs')\n\n\
+         ⚠️  COMMON MISTAKE: search_type vs output_mode are DIFFERENT!\n\
+         • search_type: WHAT to search ('files' for filenames | 'content' for inside files)\n\
+         • output_mode: HOW to format ('full' | 'files_only' | 'count_per_file')\n\
+         ✗ WRONG: output_mode='content'  ✓ RIGHT: output_mode='full'\n\n\
+         ════════════════════════════════════════════════════════════════════════\n\n\
          SEARCH STRATEGY GUIDE:\n\
          Choose the right search type based on what the user is looking for:\n\n\
          USE search_type=\"files\" WHEN:\n\
@@ -73,6 +84,8 @@ impl Tool for StartSearchTool {
              - Files: Less useful but supported\n\
          Note: Simple strings like \"start_crawl\" work as regex and will match literally\n\n\
          IMPORTANT PARAMETERS:\n\
+         - search_type: What to search (\"files\" or \"content\") - see COMMON MISTAKE warning above\n\
+         - output_mode: How to format results (\"full\", \"files_only\", or \"count_per_file\") - NOT the same as search_type!\n\
          - pattern: What to search for (file names OR content text)\n\
          - literal_search: Use exact string matching instead of regex (default: false)\n\
          - boundary_mode: \"word\", \"line\", or null for pattern boundaries (default: null)\n\

@@ -137,7 +137,7 @@ impl Tool for ReadMultipleFilesTool {
     type PromptArgs = FsReadMultipleFilesPromptArgs;
 
     fn name() -> &'static str {
-        "fs_read_multiple_files"
+        kodegen_mcp_schema::filesystem::FS_READ_MULTIPLE_FILES
     }
 
     fn description() -> &'static str {

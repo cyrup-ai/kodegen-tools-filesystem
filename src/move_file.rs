@@ -23,7 +23,7 @@ impl Tool for MoveFileTool {
     type PromptArgs = FsMoveFilePromptArgs;
 
     fn name() -> &'static str {
-        "fs_move_file"
+        kodegen_mcp_schema::filesystem::FS_MOVE_FILE
     }
 
     fn description() -> &'static str {

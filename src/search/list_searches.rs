@@ -31,7 +31,7 @@ impl Tool for ListSearchesTool {
     type PromptArgs = FsListSearchesPromptArgs;
 
     fn name() -> &'static str {
-        "fs_list_searches"
+        kodegen_mcp_schema::filesystem::FS_LIST_SEARCHES
     }
 
     fn description() -> &'static str {

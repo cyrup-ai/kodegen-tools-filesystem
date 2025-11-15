@@ -31,7 +31,7 @@ impl Tool for GetMoreSearchResultsTool {
     type PromptArgs = FsGetMoreSearchResultsPromptArgs;
 
     fn name() -> &'static str {
-        "fs_get_search_results"
+        kodegen_mcp_schema::filesystem::FS_GET_SEARCH_RESULTS
     }
 
     fn description() -> &'static str {

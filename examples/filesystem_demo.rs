@@ -2,7 +2,7 @@ mod common;
 
 use anyhow::Context;
 use kodegen_mcp_client::responses::StartSearchResponse;
-use kodegen_mcp_client::tools;
+use kodegen_mcp_schema::filesystem::*;
 use serde_json::json;
 use tracing::info;
 
@@ -51,7 +51,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         info!("1. Testing create_directory");
         client
             .call_tool(
-                tools::CREATE_DIRECTORY,
+                FS_CREATE_DIRECTORY,
                 json!({ "path": test_dir.to_string_lossy() }),
             )
             .await
@@ -62,7 +62,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         info!("2. Testing write_file");
         client
             .call_tool(
-                tools::WRITE_FILE,
+                FS_WRITE_FILE,
                 json!({
                     "path": test_file.to_string_lossy(),
                     "content": "Hello, kodegen!\nThis is a test file.\nLine 3",
@@ -77,7 +77,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         info!("3. Testing read_file");
         client
             .call_tool(
-                tools::READ_FILE,
+                FS_READ_FILE,
                 json!({ "path": test_file.to_string_lossy() }),
             )
             .await
@@ -88,7 +88,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         info!("4. Testing get_file_info");
         client
             .call_tool(
-                tools::GET_FILE_INFO,
+                FS_GET_FILE_INFO,
                 json!({ "path": test_file.to_string_lossy() }),
             )
             .await
@@ -99,7 +99,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         info!("5. Testing edit_block");
         client
             .call_tool(
-                tools::EDIT_BLOCK,
+                FS_EDIT_BLOCK,
                 json!({
                     "file_path": test_file.to_string_lossy(),
                     "old_string": "test file",
@@ -114,7 +114,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         info!("6. Testing list_directory");
         client
             .call_tool(
-                tools::LIST_DIRECTORY,
+                FS_LIST_DIRECTORY,
                 json!({ "path": test_dir.to_string_lossy() }),
             )
             .await
@@ -126,7 +126,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         info!("7. Testing move_file");
         client
             .call_tool(
-                tools::MOVE_FILE,
+                FS_MOVE_FILE,
                 json!({
                     "source": test_file.to_string_lossy(),
                     "destination": test_file_renamed.to_string_lossy()
@@ -140,7 +140,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         let test_file2 = test_dir.join("test2.txt");
         client
             .call_tool(
-                tools::WRITE_FILE,
+                FS_WRITE_FILE,
                 json!({
                     "path": test_file2.to_string_lossy(),
                     "content": "Second test file",
@@ -154,7 +154,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         info!("8. Testing read_multiple_files");
         client
             .call_tool(
-                tools::READ_MULTIPLE_FILES,
+                FS_READ_MULTIPLE_FILES,
                 json!({
                     "paths": [
                         test_file_renamed.to_string_lossy(),
@@ -170,7 +170,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         info!("9. Testing start_search");
         let response: StartSearchResponse = client
             .call_tool_typed(
-                tools::START_SEARCH,
+                FS_START_SEARCH,
                 json!({
                     "path": test_dir.to_string_lossy(),
                     "pattern": "test",
@@ -189,7 +189,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
             info!("10. Testing get_search_results");
             client
                 .call_tool(
-                    tools::get_search_results,
+                    FS_GET_SEARCH_RESULTS,
                     json!({ "session_id": session_id, "offset": 0, "length": 10 }),
                 )
                 .await
@@ -199,7 +199,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
             // 11. LIST_SEARCHES - List active searches
             info!("11. Testing list_searches");
             client
-                .call_tool(tools::LIST_SEARCHES, json!({}))
+                .call_tool(FS_LIST_SEARCHES, json!({}))
                 .await
                 .context("Failed to list searches")?;
             info!("✅ Listed searches successfully");
@@ -207,7 +207,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
             // 12. STOP_SEARCH - Stop the search
             info!("12. Testing stop_search");
             client
-                .call_tool(tools::STOP_SEARCH, json!({ "session_id": session_id }))
+                .call_tool(FS_STOP_SEARCH, json!({ "session_id": session_id }))
                 .await
                 .context("Failed to stop search")?;
             info!("✅ Stopped search successfully");
@@ -218,7 +218,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         for file in [&test_file_renamed, &test_file2] {
             client
                 .call_tool(
-                    tools::DELETE_FILE,
+                    FS_DELETE_FILE,
                     json!({ "path": file.to_string_lossy() }),
                 )
                 .await
@@ -230,7 +230,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
         info!("14. Testing delete_directory");
         client
             .call_tool(
-                tools::DELETE_DIRECTORY,
+                FS_DELETE_DIRECTORY,
                 json!({
                     "path": test_dir.to_string_lossy(),
                     "recursive": true
@@ -269,7 +269,7 @@ async fn cleanup_filesystem_resources(client: &common::LoggingClient, test_dir: 
     // Try to delete using the filesystem tool first
     if let Err(e) = client
         .call_tool(
-            tools::DELETE_DIRECTORY,
+            FS_DELETE_DIRECTORY,
             json!({
                 "path": test_dir.to_string_lossy(),
                 "recursive": true

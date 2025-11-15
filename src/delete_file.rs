@@ -23,7 +23,7 @@ impl Tool for DeleteFileTool {
     type PromptArgs = FsDeleteFilePromptArgs;
 
     fn name() -> &'static str {
-        "fs_delete_file"
+        kodegen_mcp_schema::filesystem::FS_DELETE_FILE
     }
 
     fn description() -> &'static str {

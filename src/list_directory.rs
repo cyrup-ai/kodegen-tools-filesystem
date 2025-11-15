@@ -32,7 +32,7 @@ impl Tool for ListDirectoryTool {
     type PromptArgs = FsListDirectoryPromptArgs;
 
     fn name() -> &'static str {
-        "fs_list_directory"
+        kodegen_mcp_schema::filesystem::FS_LIST_DIRECTORY
     }
 
     fn description() -> &'static str {

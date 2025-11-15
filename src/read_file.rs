@@ -288,7 +288,7 @@ impl Tool for ReadFileTool {
     type PromptArgs = FsReadFilePromptArgs;
 
     fn name() -> &'static str {
-        "fs_read_file"
+        kodegen_mcp_schema::filesystem::FS_READ_FILE
     }
 
     fn description() -> &'static str {

@@ -56,7 +56,7 @@ impl Tool for GetFileInfoTool {
     type PromptArgs = FsGetFileInfoPromptArgs;
 
     fn name() -> &'static str {
-        "fs_get_file_info"
+        kodegen_mcp_schema::filesystem::FS_GET_FILE_INFO
     }
 
     fn description() -> &'static str {

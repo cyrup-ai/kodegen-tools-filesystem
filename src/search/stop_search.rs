@@ -31,7 +31,7 @@ impl Tool for StopSearchTool {
     type PromptArgs = FsStopSearchPromptArgs;
 
     fn name() -> &'static str {
-        "fs_stop_search"
+        kodegen_mcp_schema::filesystem::FS_STOP_SEARCH
     }
 
     fn description() -> &'static str {
