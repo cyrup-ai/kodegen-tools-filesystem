@@ -60,7 +60,11 @@ impl Tool for DeleteFileTool {
         let mut contents = Vec::new();
 
         // Human summary
-        let summary = format!("✓ Deleted file {}", valid_path.display());
+        let summary = format!(
+            "\x1b[31m󰆴 Deleted file: {}\x1b[0m\n\
+             󰚽 Permanent: File removed from filesystem",
+            valid_path.display()
+        );
         contents.push(Content::text(summary));
 
         // JSON metadata

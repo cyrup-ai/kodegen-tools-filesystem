@@ -76,35 +76,15 @@ impl Tool for GetMoreSearchResultsTool {
             "running"
         };
 
-        let mut summary = format!(
-            "🔍 Search results ({} matches from session: {})\n\nStatus: {}\nReturned: {} of {} total results",
+        // Build formatted summary with icons and color
+        let summary = format!(
+            "\x1b[36m󰆼 Search results: {} matches\x1b[0m\n 󰓎 Session: {} · Status: {}\n 󰘖 Showing: {} of {} total results",
             response.total_matches,
             response.session_id,
             status,
             response.returned_count,
             response.total_results
         );
-
-        if response.returned_count > 0 {
-            summary.push_str("\n\nResults:\n");
-            for (i, result) in response.results.iter().take(10).enumerate() {
-                if let Some(line) = result.line {
-                    summary.push_str(&format!("{}. {}:{}\n", i + 1, result.file, line));
-                } else {
-                    summary.push_str(&format!("{}. {}\n", i + 1, result.file));
-                }
-            }
-            if response.returned_count > 10 {
-                summary.push_str(&format!("\n... ({} more results not shown)", response.returned_count - 10));
-            }
-        }
-
-        if response.has_more_results {
-            summary.push_str(&format!(
-                "\n\n▶ More results available. Use offset={} to continue.",
-                args.offset + response.returned_count as i64
-            ));
-        }
 
         contents.push(Content::text(summary));
 

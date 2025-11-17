@@ -335,7 +335,8 @@ impl Tool for EditBlockTool {
                 format!("{}", delta)
             };
             let summary = format!(
-                "✓ Made {} replacement(s) in {}\n\nOld: {} bytes\nNew: {} bytes\nDelta: {} bytes{}",
+                "\x1b[33m󰆐 {} replacement(s) in {}\x1b[0m\n\
+                 󰢬 Precision: {} → {} bytes (delta: {}){}",
                 occurrence_count,
                 args.file_path,
                 args.old_string.len(),
@@ -391,15 +392,13 @@ impl Tool for EditBlockTool {
                 format!("{}", delta)
             };
             let summary = format!(
-                "⚠️  Made {} replacement(s) in {} (expected {})\n\nOld: {} bytes\nNew: {} bytes\nDelta: {} bytes\n\n{}\n{}{}",
+                "\x1b[33m󰆐 {} replacement(s) in {}\x1b[0m\n 󰢬 Precision: {} → {} bytes (delta: {}) · Expected: {} · See Content[1] for details{}",
                 occurrence_count,
                 args.file_path,
-                args.expected_replacements,
                 args.old_string.len(),
                 args.new_string.len(),
                 delta_str,
-                suggestion.message,
-                suggestion.format(),
+                args.expected_replacements,
                 warning
             );
             contents.push(Content::text(summary));

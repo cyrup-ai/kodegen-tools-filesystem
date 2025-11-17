@@ -58,24 +58,16 @@ impl Tool for ListSearchesTool {
 
         let mut contents = Vec::new();
 
-        // Content 1: Human-readable summary
+        // Content 1: Human-readable summary with ANSI colors and icons
         let count = sessions.len();
-        let mut summary = format!("🔍 Active searches ({} session{})\n", count, if count == 1 { "" } else { "s" });
-        
-        if sessions.is_empty() {
-            summary.push_str("\nNo active search sessions.");
+        let summary = if sessions.is_empty() {
+            "\x1b[36m󰅍 Active searches\x1b[0m\n 󰓎 Sessions: 0 active · No searches running".to_string()
         } else {
-            summary.push('\n');
-            for session in &sessions {
-                let status = if session.is_complete { "completed" } else { "running" };
-                let runtime_sec = session.runtime_ms as f64 / 1000.0;
-                
-                summary.push_str(&format!(
-                    "[{}] {} search \"{}\" ({}, {:.1}s, {} results)\n",
-                    session.id, session.search_type, session.pattern, status, runtime_sec, session.total_results
-                ));
-            }
-        }
+            format!(
+                "\x1b[36m󰅍 Active searches\x1b[0m\n 󰓎 Sessions: {} active",
+                count
+            )
+        };
         contents.push(Content::text(summary));
 
         // Content 2: JSON metadata

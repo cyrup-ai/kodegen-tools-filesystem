@@ -63,7 +63,7 @@ impl Tool for StopSearchTool {
         if success {
             // Content 1: Human-readable summary
             let summary = format!(
-                "✓ Stopped search session: {}\n\nResults remain available for reading.",
+                "\x1b[33m󰏥 Stopped search: {}\x1b[0m\n󰘖 Results: Available for reading",
                 args.session_id
             );
             contents.push(Content::text(summary));
@@ -83,7 +83,7 @@ impl Tool for StopSearchTool {
         } else {
             // Content 1: Human-readable summary (failure case)
             let summary = format!(
-                "⚠️  Search session not found: {}\n\nSession may have already completed or been cleaned up.",
+                "\x1b[33m󰏥 Search not found: {}\x1b[0m\n󰚽 Warning: Session may have completed or been cleaned up",
                 args.session_id
             );
             contents.push(Content::text(summary));

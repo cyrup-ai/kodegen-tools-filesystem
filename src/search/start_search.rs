@@ -291,13 +291,15 @@ impl Tool for StartSearchTool {
         };
 
         let summary = format!(
-            "🔍 Started search session: {}\n\nPattern: {}\nPath: {}\nType: {}\nStatus: {}\nInitial results: {}",
+            "\x1b[36m󰺮 Search started: {}\x1b[0m\n\
+             󰓎 Session: {} · Pattern: \"{}\"\n\
+             󰘖 Status: {} · {} initial results from {}",
+            search_type_str,
             response.session_id,
             args.pattern,
-            args.path,
-            search_type_str,
             status,
-            response.total_results
+            response.total_results,
+            args.path
         );
         contents.push(Content::text(summary));
 

@@ -59,7 +59,11 @@ impl Tool for CreateDirectoryTool {
         let mut contents = Vec::new();
 
         // Human summary
-        let summary = format!("✓ Created directory {}", valid_path.display());
+        let summary = format!(
+            "\x1b[32m󰉋 Created directory: {}\x1b[0m\n\
+             󰄴 Status: Directory ready (idempotent)",
+            valid_path.display()
+        );
         contents.push(Content::text(summary));
 
         // JSON metadata

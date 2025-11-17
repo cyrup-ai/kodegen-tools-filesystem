@@ -93,25 +93,13 @@ impl Tool for ListDirectoryTool {
         // Content[0]: Human-Readable Summary
         // ========================================
         let total = items.len();
-        let truncated = total > 50;
-        let display_items = if truncated {
-            &items[..50]
-        } else {
-            &items[..]
-        };
-
-        let mut summary = format!(
-            "📁 Listed {}\n\nContents ({} items):\n- {} directories\n- {} files\n\n{}",
+        let summary = format!(
+            "\x1b[36m󰉋 Listed directory: {}\x1b[0m\n 󰄵 Contents: {} items ({} dirs · {} files)",
             valid_path.display(),
             total,
             dir_count,
-            file_count,
-            display_items.join("\n")
+            file_count
         );
-
-        if truncated {
-            summary.push_str(&format!("\n... ({} more items not shown)", total - 50));
-        }
 
         contents.push(Content::text(summary));
 
@@ -124,8 +112,7 @@ impl Tool for ListDirectoryTool {
             "total": total,
             "directories": dir_count,
             "files": file_count,
-            "entries": items,
-            "truncated": truncated
+            "entries": items
         });
         let json_str = serde_json::to_string_pretty(&metadata)
             .unwrap_or_else(|_| "{}".to_string());

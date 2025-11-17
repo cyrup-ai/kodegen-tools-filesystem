@@ -131,7 +131,6 @@ impl Tool for GetFileInfoTool {
         // ========================================
         // Content[0]: Human-Readable Summary
         // ========================================
-        let emoji = if stats.is_dir() { "📁" } else { "📄" };
         let type_str = if stats.is_dir() {
             "Directory"
         } else {
@@ -155,24 +154,20 @@ impl Tool for GetFileInfoTool {
             format!("{} days ago", modified_secs_ago / 86400)
         };
 
-        let mut summary = format!(
-            "{} {} Info: {}\n\nType: {}\nSize: {}",
-            emoji,
+        // Line count string (if available)
+        let line_count_str = line_count_opt.map_or(String::new(), |lc| format!("{} lines · ", lc));
+
+        // Build compact two-line format with magenta color on line 1 only
+        let summary = format!(
+            "\x1b[35m󰙅 {} Metadata: {}\x1b[0m\n\
+             󰘖 Details: {} · {}Modified: {} · Perms: {}",
             type_str,
             valid_path.display(),
-            type_str,
-            size_str
+            size_str,
+            line_count_str,
+            time_str,
+            perms_str
         );
-
-        if let Some(lc) = line_count_opt {
-            summary.push_str(&format!(" ({} lines)", lc));
-        }
-
-        summary.push_str(&format!("\nModified: {}\n", time_str));
-
-        if !perms_str.is_empty() {
-            summary.push_str(&format!("Permissions: {}", perms_str));
-        }
 
         contents.push(Content::text(summary));
 

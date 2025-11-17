@@ -67,7 +67,12 @@ impl Tool for DeleteDirectoryTool {
         let mut contents = Vec::new();
 
         // Human summary
-        let summary = format!("✓ Deleted directory {} (recursive)", valid_path.display());
+        let summary = format!(
+            "\x1b[31m󰆴 Deleted directory (recursive)\x1b[0m\n\
+             󰉋 Removed: {}\n\
+             󰚽 Permanent: All contents deleted",
+            valid_path.display()
+        );
         contents.push(Content::text(summary));
 
         // JSON metadata

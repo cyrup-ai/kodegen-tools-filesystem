@@ -94,10 +94,11 @@ impl Tool for WriteFileTool {
             "Wrote"
         };
         let summary = format!(
-            "✓ {} {} bytes to {} ({} lines)\nMode: {}",
+            "\x1b[32m󰏫 {} file: {}\x1b[0m\n\
+             󰄴 Written: {} bytes ({} lines) · Mode: {}",
             verb,
-            content_bytes,
             valid_path.display(),
+            content_bytes,
             line_count,
             args.mode
         );

@@ -337,28 +337,16 @@ impl Tool for ReadFileTool {
             // For images: summary describes the image
             let size_kb = size_bytes.map_or(0.0, |b| b as f64 / 1024.0);
             format!(
-                "🖼️  Read image: {}\nFormat: {}\nSize: {:.1} KB",
+                "\x1b[36m󰗚 Read image: {}\x1b[0m\n 󰈙 Format: {} · Size: {:.1} KB",
                 args.path, mime_type, size_kb
             )
-        } else if let Some(total) = total_lines {
-            // For text files: include the content with header
-            let read = lines_read.unwrap_or(0);
-            if is_partial {
-                format!(
-                    "📄 Read {} lines from {} (line {}-{} of {} total)\n\n{}",
-                    read,
-                    args.path,
-                    args.offset.max(0),
-                    args.offset.max(0) as u64 + read,
-                    total,
-                    content
-                )
-            } else {
-                format!("📄 Read file: {}\n\n{}", args.path, content)
-            }
         } else {
-            // Fallback for text files without line count
-            format!("📄 Read file: {}\n\n{}", args.path, content)
+            // For text files: show summary only, content is in Content[1]
+            let read = lines_read.unwrap_or(0);
+            format!(
+                "\x1b[36m󰗚 Read file: {}\x1b[0m\n 󰈙 Content: {} lines · {} bytes · Use Content[1] for data",
+                args.path, read, content.len()
+            )
         };
         contents.push(Content::text(summary));
 

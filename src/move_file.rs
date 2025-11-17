@@ -53,7 +53,9 @@ impl Tool for MoveFileTool {
 
         // Human summary
         let summary = format!(
-            "✓ Moved {} → {}",
+            "\x1b[34m󰉐 Moved file/directory\x1b[0m\n\
+             󰜱 From: {}\n\
+             󰜱 To:   {}",
             source_path.display(),
             dest_path.display()
         );

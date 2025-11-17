@@ -181,27 +181,10 @@ impl Tool for ReadMultipleFilesTool {
         // ========================================
         // Content[0]: Human-Readable Summary
         // ========================================
-        let mut summary_lines = vec![format!(
-            "📚 Read {} files ({} successful, {} failed)\n",
-            total, successful, failed
-        )];
-
-        for result in &results {
-            if result.error.is_none() {
-                let lines_info = if let Some(content) = &result.content {
-                    let line_count = content.lines().count();
-                    format!(" ({} lines)", line_count)
-                } else {
-                    String::new()
-                };
-                summary_lines.push(format!("✓ {}{}", result.path, lines_info));
-            } else {
-                let error_msg = result.error.as_ref().unwrap();
-                summary_lines.push(format!("✗ {} ({})", result.path, error_msg));
-            }
-        }
-
-        let summary = summary_lines.join("\n");
+        let summary = format!(
+            "\x1b[36m󰄶 Read multiple files (parallel)\x1b[0m\n 󰗚 Results: {} successful · {} failed of {} total",
+            successful, failed, total
+        );
         contents.push(Content::text(summary));
 
         // ========================================
