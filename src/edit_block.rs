@@ -16,6 +16,30 @@ use std::time::Instant;
 use tokio::fs;
 
 // ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/// Safely count newlines before a byte index, adjusting for UTF-8 boundaries
+///
+/// The byte_index may fall inside a multi-byte UTF-8 character. This function
+/// adjusts it to the nearest valid character boundary at or before the index,
+/// then counts newlines in that prefix.
+///
+/// # Arguments
+/// * `content` - The string to search in
+/// * `byte_index` - Byte index from fuzzy search (may not be char-aligned)
+///
+/// # Returns
+/// Line number (1-based) where the byte index occurs
+fn count_lines_before_index(content: &str, byte_index: usize) -> usize {
+    // Adjust to nearest valid UTF-8 character boundary at or before byte_index
+    let safe_index = content.floor_char_boundary(byte_index);
+    
+    // Count newlines in the safe prefix and add 1 for 1-based line numbers
+    content[..safe_index].matches('\n').count() + 1
+}
+
+// ============================================================================
 // TOOL STRUCT
 // ============================================================================
 
@@ -174,7 +198,7 @@ impl Tool for EditBlockTool {
                 let is_whitespace_only = diff.is_whitespace_only();
 
                 // Calculate line number where match was found
-                let line_number = content[..fuzzy_result.start].matches('\n').count() + 1;
+                let line_number = count_lines_before_index(&content, fuzzy_result.start);
 
                 // Log the fuzzy match attempt
                 let logger = get_logger().await;
@@ -238,7 +262,7 @@ impl Tool for EditBlockTool {
             }
 
             // Calculate line number where match was found
-            let line_number = content[..fuzzy_result.start].matches('\n').count() + 1;
+            let line_number = count_lines_before_index(&content, fuzzy_result.start);
 
             // Log the fuzzy match attempt (below threshold)
             let diff = CharDiff::new(&args.old_string, &fuzzy_result.value);

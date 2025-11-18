@@ -124,7 +124,7 @@ impl Tool for ListSearchesTool {
                        \"count\": 2\n\
                      }\n\n\
                      Understanding the output:\n\
-                     - id: Session ID for use with get_search_results or stop_search\n\
+                     - id: Search ID for use with get_search_results or stop_search\n\
                      - search_type: \\\"files\\\" (filename search) or \\\"content\\\" (text search)\n\
                      - pattern: The search pattern being used\n\
                      - is_complete: true = finished, false = still running\n\
@@ -132,13 +132,13 @@ impl Tool for ListSearchesTool {
                      - runtime_ms: How long the search has been running\n\
                      - total_results: Number of results found so far\n\n\
                      Common workflows:\n\
-                     1. Check what's searching: list_searches() → See all session IDs\n\
-                     2. Get results from specific search: get_search_results({\\\"session_id\\\": \\\"search_1_...\\\"}) \n\
-                     3. Stop unwanted search: stop_search({\\\"session_id\\\": \\\"search_1_...\\\"})\n\n\
+                     1. Check what's searching: list_searches() → See all search IDs\n\
+                     2. Get results from specific search: get_search_results({\\\"search_id\\\": \\\"search_1_...\\\"}) \n\
+                     3. Stop unwanted search: stop_search({\\\"search_id\\\": \\\"search_1_...\\\"})\n\n\
                      When to use:\n\
                      - Lost track of running searches\n\
                      - Want to monitor all active search operations\n\
-                     - Need session IDs for other operations\n\
+                     - Need search IDs for other operations\n\
                      - Checking if long-running search is still active\n\n\
                      Best practices:\n\
                      - Call periodically to monitor long-running searches\n\
@@ -148,8 +148,8 @@ impl Tool for ListSearchesTool {
                      1. start_search({\\\"pattern\\\": \\\"TODO\\\", \\\"search_type\\\": \\\"content\\\"}) → search_1\n\
                      2. start_search({\\\"pattern\\\": \\\"*.rs\\\", \\\"search_type\\\": \\\"files\\\"}) → search_2\n\
                      3. list_searches() → [{id: search_1, ...}, {id: search_2, ...}]\n\
-                     4. get_search_results({\\\"session_id\\\": \\\"search_1\\\"}) → Get TODO results\n\
-                     5. stop_search({\\\"session_id\\\": \\\"search_2\\\"}) → Cancel file search if needed",
+                     4. get_search_results({\\\"search_id\\\": \\\"search_1\\\"}) → Get TODO results\n\
+                     5. stop_search({\\\"search_id\\\": \\\"search_2\\\"}) → Cancel file search if needed",
                 ),
             },
         ])

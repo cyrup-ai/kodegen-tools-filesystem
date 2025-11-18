@@ -51,7 +51,7 @@ impl SearchManager {
         log::debug!("Starting search with effective max_results: {effective_max_results}");
 
         // Validate path and generate session ID
-        let (validated_path, session_id) =
+        let (validated_path, search_id) =
             session::validate_and_generate_id(&options, &self.config_manager).await?;
 
         // Create channels for search cancellation and first-result notification
@@ -60,7 +60,7 @@ impl SearchManager {
 
         // Build session object
         let search_session = session::build_session(
-            session_id.clone(),
+            search_id.clone(),
             &options,
             effective_max_results,
             cancellation_tx,
@@ -73,12 +73,12 @@ impl SearchManager {
 
             // Defensive check (debug builds only) - if this fails, RNG is broken
             debug_assert!(
-                !sessions.contains_key(&session_id),
+                !sessions.contains_key(&search_id),
                 "IMPOSSIBLE: UUID v4 collision detected! RNG may be compromised: {}",
-                session_id
+                search_id
             );
 
-            sessions.insert(session_id.clone(), search_session);
+            sessions.insert(search_id.clone(), search_session);
         }
         // Lock automatically dropped here
 
@@ -88,7 +88,7 @@ impl SearchManager {
 
         // Spawn background search task
         spawn::spawn_search_task(
-            session_id.clone(),
+            search_id.clone(),
             options,
             validated_path,
             cancellation_rx,
@@ -98,18 +98,18 @@ impl SearchManager {
         // If sorting is enabled, wait for search to complete before returning
         if sort_by.is_some() {
             // Wait for search to complete or timeout
-            waiting::wait_for_completion(&self.sessions, &session_id).await?;
+            waiting::wait_for_completion(&self.sessions, &search_id).await?;
 
             // Apply sorting to results
-            waiting::apply_sorting(&self.sessions, &session_id, sort_by, sort_direction).await?;
+            waiting::apply_sorting(&self.sessions, &search_id, sort_by, sort_direction).await?;
         } else {
-            // No sorting: wait for first result OR 40ms timeout (streaming mode)
+            // No sorting: wait up to 5s for first result (makes fast searches trivial for agents)
             waiting::wait_for_first_result(&mut first_result_rx_for_wait).await;
         }
 
         // Return initial state
         let sessions = self.sessions.read().await;
-        let session = sessions.get(&session_id).ok_or_else(|| {
+        let session = sessions.get(&search_id).ok_or_else(|| {
             McpError::Other(anyhow::anyhow!("Session lost during initialization"))
         })?;
 
@@ -134,7 +134,7 @@ impl SearchManager {
         };
 
         Ok(StartSearchResponse {
-            session_id: session_id.clone(),
+            search_id: search_id.clone(),
             is_complete,
             is_error,
             results: initial_results,
@@ -152,8 +152,8 @@ impl SearchManager {
     ///
     /// # Errors
     /// Returns error if session cannot be accessed (should not occur in practice)
-    pub async fn terminate_search(&self, session_id: &str) -> Result<bool, McpError> {
-        operations::terminate_search(&self.sessions, session_id).await
+    pub async fn terminate_search(&self, search_id: &str) -> Result<bool, McpError> {
+        operations::terminate_search(&self.sessions, search_id).await
     }
 
     /// Get paginated results from an active search session
@@ -162,11 +162,11 @@ impl SearchManager {
     /// Returns error if session not found
     pub async fn get_results(
         &self,
-        session_id: &str,
+        search_id: &str,
         offset: i64,
         length: usize,
     ) -> Result<GetMoreSearchResultsResponse, McpError> {
-        operations::get_results(&self.sessions, session_id, offset, length).await
+        operations::get_results(&self.sessions, search_id, offset, length).await
     }
 
     /// List all active search sessions

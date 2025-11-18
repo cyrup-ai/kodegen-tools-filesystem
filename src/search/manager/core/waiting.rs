@@ -10,10 +10,11 @@ use tokio::sync::watch;
 
 /// Wait for first result or timeout (streaming mode)
 ///
-/// Returns after receiving first result notification or 40ms timeout
+/// Returns after receiving first result notification or 5 second timeout
 pub async fn wait_for_first_result(first_result_rx: &mut watch::Receiver<bool>) {
     use tokio::time::timeout;
-    let _ = timeout(Duration::from_millis(40), first_result_rx.changed()).await;
+    // Wait up to 5 seconds for results - makes fast searches trivial for agents
+    let _ = timeout(Duration::from_secs(5), first_result_rx.changed()).await;
 }
 
 /// Wait for search completion (sorting mode)
@@ -24,7 +25,7 @@ pub async fn wait_for_first_result(first_result_rx: &mut watch::Receiver<bool>) 
 /// Returns error if session is lost during wait
 pub async fn wait_for_completion(
     sessions: &tokio::sync::RwLock<HashMap<String, SearchSession>>,
-    session_id: &str,
+    search_id: &str,
 ) -> Result<(), McpError> {
     let timeout_duration = Duration::from_secs(30); // Max 30s wait for sorting
     let wait_start = Instant::now();
@@ -34,7 +35,7 @@ pub async fn wait_for_completion(
 
         let sessions_guard = sessions.read().await;
         let session = sessions_guard
-            .get(session_id)
+            .get(search_id)
             .ok_or_else(|| McpError::Other(anyhow::anyhow!("Session lost during wait")))?;
 
         // Keep session alive during wait - prevents cleanup while legitimately waiting
@@ -60,13 +61,13 @@ pub async fn wait_for_completion(
 /// Returns error if session is lost during sorting
 pub async fn apply_sorting(
     sessions: &tokio::sync::RwLock<HashMap<String, SearchSession>>,
-    session_id: &str,
+    search_id: &str,
     sort_by: Option<SortBy>,
     sort_direction: Option<SortDirection>,
 ) -> Result<(), McpError> {
     let sessions_guard = sessions.read().await;
     let session = sessions_guard
-        .get(session_id)
+        .get(search_id)
         .ok_or_else(|| McpError::Other(anyhow::anyhow!("Session lost after search")))?;
 
     let mut results = session.results.write().await;

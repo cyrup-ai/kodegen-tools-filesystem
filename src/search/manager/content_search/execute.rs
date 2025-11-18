@@ -1,6 +1,6 @@
 //! Main execute function for content search
 
-use super::super::super::types::{SearchOutputMode, SearchResult};
+use super::super::super::types::{ReturnMode, SearchResult};
 use super::ContentSearchBuilder;
 use ignore::WalkBuilder;
 use std::sync::Arc;
@@ -76,8 +76,8 @@ pub(in super::super) fn execute(
         }),
         fixed_strings: options.literal_search,
         context,
-        max_count: if ctx.output_mode == SearchOutputMode::FilesOnly {
-            Some(1) // Limit to 1 match per file for FilesOnly mode (optimization)
+        max_count: if ctx.return_only == ReturnMode::Paths {
+            Some(1) // Limit to 1 match per file for Paths mode (optimization)
         } else {
             options.max_results.map(u64::from)
         },
@@ -103,22 +103,22 @@ pub(in super::super) fn execute(
         ..Default::default()
     };
 
-    // Bridge SearchMode to SearchOutputMode for ripgrep CLI compatibility
-    // Maps ripgrep's SearchMode enum variants to MCP's SearchOutputMode
-    let effective_output_mode = match low_args.mode {
+    // Bridge SearchMode to ReturnMode for ripgrep CLI compatibility
+    // Maps ripgrep's SearchMode enum variants to MCP's ReturnMode
+    let effective_return_mode = match low_args.mode {
         Mode::Search(SearchMode::Count | SearchMode::CountMatches) => {
             // -c/--count flag
-            SearchOutputMode::CountPerFile
+            ReturnMode::Counts
         }
         _ => {
-            // For Standard and Json modes, use the MCP-provided output mode
-            ctx.output_mode
+            // For Standard and Json modes, use the MCP-provided return mode
+            ctx.return_only
         }
     };
 
-    // Update max_count based on effective output mode
-    if effective_output_mode == SearchOutputMode::FilesOnly && low_args.max_count.is_none() {
-        // Optimization: stop after first match per file for FilesOnly mode
+    // Update max_count based on effective return mode
+    if effective_return_mode == ReturnMode::Paths && low_args.max_count.is_none() {
+        // Optimization: stop after first match per file for Paths mode
         low_args.max_count = Some(1);
     }
 
@@ -159,7 +159,7 @@ pub(in super::super) fn execute(
         hi_args,
         matcher,
         max_results: options.max_results.map(|m| m as usize),
-        output_mode: effective_output_mode,
+        return_only: effective_return_mode,
         results: Arc::clone(&ctx.results),
         total_matches: Arc::clone(&ctx.total_matches),
         total_files: Arc::clone(&ctx.total_files),
@@ -177,8 +177,8 @@ pub(in super::super) fn execute(
     // Execute parallel search
     walker.build_parallel().visit(&mut builder);
 
-    // Finalize CountPerFile mode - convert HashMap counts to SearchResults
-    if effective_output_mode == SearchOutputMode::CountPerFile {
+    // Finalize Counts mode - convert HashMap counts to SearchResults
+    if effective_return_mode == ReturnMode::Counts {
         use super::super::super::types::SearchResultType;
 
         // Phase 1: Build results Vec while holding only read lock on file_counts

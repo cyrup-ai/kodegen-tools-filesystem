@@ -1,6 +1,6 @@
 //! Core visitor implementation for content search
 
-use super::super::super::types::{SearchError, SearchOutputMode, SearchResult};
+use super::super::super::types::{SearchError, ReturnMode, SearchResult};
 use super::super::config::{
     LAST_READ_UPDATE_INTERVAL_MS, LAST_READ_UPDATE_MATCH_THRESHOLD, MAX_DETAILED_ERRORS,
     RESULT_BUFFER_SIZE,
@@ -16,7 +16,7 @@ pub(in super::super) struct ContentSearchVisitor {
     pub(super) worker: super::super::super::rg::search::SearchWorker<Vec<u8>>,
     pub(super) haystack_builder: super::super::super::rg::haystack::HaystackBuilder,
     pub(super) max_results: Option<usize>,
-    pub(super) output_mode: SearchOutputMode,
+    pub(super) return_only: ReturnMode,
     pub(super) results: Arc<RwLock<Vec<SearchResult>>>,
     pub(super) total_matches: Arc<AtomicUsize>,
     pub(super) total_files: Arc<AtomicUsize>,

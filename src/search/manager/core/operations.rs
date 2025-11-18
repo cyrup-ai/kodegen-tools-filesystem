@@ -1,7 +1,7 @@
 //! Search session operations (terminate, get_more, list)
 
 use super::super::super::types::{
-    GetMoreSearchResultsResponse, SearchSession, SearchSessionInfo, SearchType,
+    GetMoreSearchResultsResponse, SearchSession, SearchSessionInfo, SearchIn,
 };
 use kodegen_mcp_tool::error::McpError;
 
@@ -17,11 +17,11 @@ use tokio::sync::RwLock;
 /// Returns error if session cannot be accessed (should not occur in practice)
 pub async fn terminate_search(
     sessions: &RwLock<HashMap<String, SearchSession>>,
-    session_id: &str,
+    search_id: &str,
 ) -> Result<bool, McpError> {
     let sessions_guard = sessions.read().await;
 
-    let Some(session) = sessions_guard.get(session_id) else {
+    let Some(session) = sessions_guard.get(search_id) else {
         return Ok(false); // Session not found
     };
 
@@ -31,11 +31,11 @@ pub async fn terminate_search(
 
     // Send cancellation signal - This actually stops the task!
     if let Ok(()) = session.cancellation_tx.send(true) {
-        log::info!("Sent cancellation signal to search session: {session_id}");
+        log::info!("Sent cancellation signal to search session: {search_id}");
         Ok(true) // Signal sent successfully
     } else {
         // Channel closed means receiver dropped (task already finished)
-        log::debug!("Search session {session_id} already finished");
+        log::debug!("Search session {search_id} already finished");
         Ok(false)
     }
 }
@@ -46,13 +46,13 @@ pub async fn terminate_search(
 /// Returns error if session not found
 pub async fn get_results(
     sessions: &RwLock<HashMap<String, SearchSession>>,
-    session_id: &str,
+    search_id: &str,
     offset: i64,
     length: usize,
 ) -> Result<GetMoreSearchResultsResponse, McpError> {
     let sessions_guard = sessions.read().await;
-    let session = sessions_guard.get(session_id).ok_or_else(|| {
-        McpError::InvalidArguments(format!("Search session {session_id} not found"))
+    let session = sessions_guard.get(search_id).ok_or_else(|| {
+        McpError::InvalidArguments(format!("Search session {search_id} not found"))
     })?;
 
     // Read status fields first (no lock coupling needed for these)
@@ -116,7 +116,7 @@ pub async fn get_results(
     };
 
     Ok(GetMoreSearchResultsResponse {
-        session_id: session_id.to_string(),
+        search_id: search_id.to_string(),
         results: sliced_results.clone(),
         returned_count: sliced_results.len(),
         total_results,
@@ -147,9 +147,9 @@ pub async fn list_active_sessions(
 
         result.push(SearchSessionInfo {
             id: session.id.clone(),
-            search_type: match session.search_type {
-                SearchType::Files => "files".to_string(),
-                SearchType::Content => "content".to_string(),
+            search_type: match session.search_in {
+                SearchIn::Filenames => "filenames".to_string(),
+                SearchIn::Content => "content".to_string(),
             },
             pattern: session.pattern.clone(),
             is_complete,

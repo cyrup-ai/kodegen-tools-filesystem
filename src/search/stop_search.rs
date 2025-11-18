@@ -56,7 +56,7 @@ impl Tool for StopSearchTool {
     }
 
     async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
-        let success = self.manager.terminate_search(&args.session_id).await?;
+        let success = self.manager.terminate_search(&args.search_id).await?;
 
         let mut contents = Vec::new();
 
@@ -64,17 +64,17 @@ impl Tool for StopSearchTool {
             // Content 1: Human-readable summary
             let summary = format!(
                 "\x1b[33m󰏥 Stopped search: {}\x1b[0m\n󰘖 Results: Available for reading",
-                args.session_id
+                args.search_id
             );
             contents.push(Content::text(summary));
 
             // Content 2: JSON metadata
             let metadata = json!({
                 "success": true,
-                "session_id": args.session_id,
+                "search_id": args.search_id,
                 "message": format!(
-                    "Search session {} terminated successfully. Results remain available for reading.",
-                    args.session_id
+                    "Search {} terminated successfully. Results remain available for reading.",
+                    args.search_id
                 )
             });
             let json_str = serde_json::to_string_pretty(&metadata)
@@ -83,16 +83,16 @@ impl Tool for StopSearchTool {
         } else {
             // Content 1: Human-readable summary (failure case)
             let summary = format!(
-                "\x1b[33m󰏥 Search not found: {}\x1b[0m\n󰚽 Warning: Session may have completed or been cleaned up",
-                args.session_id
+                "\x1b[33m󰏥 Search not found: {}\x1b[0m\n󰚽 Warning: Search may have completed or been cleaned up",
+                args.search_id
             );
             contents.push(Content::text(summary));
 
             // Content 2: JSON metadata (failure case)
             let metadata = json!({
                 "success": false,
-                "session_id": args.session_id,
-                "message": format!("Search session {} not found or already completed.", args.session_id)
+                "search_id": args.search_id,
+                "message": format!("Search {} not found or already completed.", args.search_id)
             });
             let json_str = serde_json::to_string_pretty(&metadata)
                 .unwrap_or_else(|_| "{}".to_string());
@@ -117,20 +117,20 @@ impl Tool for StopSearchTool {
                 content: PromptMessageContent::text(
                     "The stop_search tool terminates active search sessions:\n\n\
                      Basic usage:\n\
-                     stop_search({\"session_id\": \"search_123_1234567890\"})\n\n\
+                     stop_search({\"search_id\": \"search_123_1234567890\"})\n\n\
                      How it works:\n\
-                     1. Takes a session_id from start_search\n\
+                     1. Takes a search_id from start_search\n\
                      2. Kills the ripgrep process (SIGKILL)\n\
                      3. Marks the search as complete\n\
                      4. Keeps results available for reading\n\n\
                      Typical workflow:\n\
                      1. Start: start_search({\"path\": \"/large/directory\", \"pattern\": \"TODO\"})\n\
-                        Returns: {\"session_id\": \"search_123_1234567890\"}\n\
-                     2. Read: get_search_results({\"session_id\": \"search_123_1234567890\"})\n\
+                        Returns: {\"search_id\": \"search_123_1234567890\"}\n\
+                     2. Read: get_search_results({\"search_id\": \"search_123_1234567890\"})\n\
                         See initial results, realize you found what you need\n\
-                     3. Stop: stop_search({\"session_id\": \"search_123_1234567890\"})\n\
+                     3. Stop: stop_search({\"search_id\": \"search_123_1234567890\"})\n\
                         Terminates the search early\n\
-                     4. Read: get_search_results({\"session_id\": \"search_123_1234567890\"})\n\
+                     4. Read: get_search_results({\"search_id\": \"search_123_1234567890\"})\n\
                         Can still read final results\n\n\
                      When to use:\n\
                      - Found what you need in first few results\n\

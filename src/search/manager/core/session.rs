@@ -49,23 +49,23 @@ pub async fn validate_and_generate_id(
     let validated_path = validate_path(&options.root_path, config_manager).await?;
 
     // Generate unique session ID - UUID v4 collisions are 1 in 5.3×10³⁶
-    let session_id = Uuid::new_v4().to_string();
+    let search_id = Uuid::new_v4().to_string();
 
-    Ok((validated_path, session_id))
+    Ok((validated_path, search_id))
 }
 
 /// Build a new search session
 ///
 /// Returns the session ready for insertion into the sessions map
 pub fn build_session(
-    session_id: String,
+    search_id: String,
     options: &SearchSessionOptions,
     effective_max_results: usize,
     cancellation_tx: watch::Sender<bool>,
     first_result_tx: watch::Sender<bool>,
 ) -> SearchSession {
     SearchSession {
-        id: session_id.clone(),
+        id: search_id.clone(),
         cancellation_tx: cancellation_tx.clone(),
         first_result_tx: first_result_tx.clone(),
         results: Arc::new(RwLock::new(Vec::new())),
@@ -77,13 +77,13 @@ pub fn build_session(
         last_read_time_atomic: Arc::new(AtomicU64::new(0)),
         start_time: Instant::now(),
         was_incomplete: Arc::new(RwLock::new(false)),
-        search_type: options.search_type.clone(),
+        search_in: options.search_in,
         pattern: options.pattern.clone(),
         timeout_ms: options.timeout_ms,
         error_count: Arc::new(AtomicUsize::new(0)),
         errors: Arc::new(RwLock::new(Vec::new())),
         max_results: effective_max_results,
-        output_mode: options.output_mode,
+        return_only: options.return_only,
         seen_files: Arc::new(RwLock::new(HashSet::new())),
         file_counts: Arc::new(RwLock::new(HashMap::new())),
     }

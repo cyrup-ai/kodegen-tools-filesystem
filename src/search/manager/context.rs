@@ -4,7 +4,7 @@
 //! needed by search visitors to coordinate their work across threads.
 
 use super::super::types::{
-    FileCountData, SearchError, SearchOutputMode, SearchResult, SearchSession,
+    FileCountData, SearchError, ReturnMode, SearchResult, SearchSession,
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -26,7 +26,7 @@ pub struct SearchContext {
     pub was_incomplete: Arc<RwLock<bool>>,
     pub error_count: Arc<AtomicUsize>,
     pub errors: Arc<RwLock<Vec<SearchError>>>,
-    pub output_mode: SearchOutputMode,
+    pub return_only: ReturnMode,
     pub seen_files: Arc<RwLock<HashSet<String>>>,
     pub file_counts: Arc<RwLock<HashMap<String, FileCountData>>>,
     pub start_time: Instant,
@@ -51,7 +51,7 @@ impl SearchContext {
             was_incomplete: Arc::clone(&session.was_incomplete),
             error_count: Arc::clone(&session.error_count),
             errors: Arc::clone(&session.errors),
-            output_mode: session.output_mode,
+            return_only: session.return_only,
             seen_files: Arc::clone(&session.seen_files),
             file_counts: Arc::clone(&session.file_counts),
             start_time: session.start_time,

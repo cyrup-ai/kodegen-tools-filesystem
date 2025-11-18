@@ -1,6 +1,6 @@
 //! ParallelVisitor implementation for ContentSearchVisitor
 
-use super::super::super::types::{SearchOutputMode, SearchResult};
+use super::super::super::types::{ReturnMode, SearchResult};
 use super::ContentSearchVisitor;
 use ignore::{DirEntry, ParallelVisitor};
 use std::sync::atomic::Ordering;
@@ -20,13 +20,13 @@ impl ParallelVisitor for ContentSearchVisitor {
 
         // Check if we've reached max results (mode-aware)
         if let Some(max) = self.max_results {
-            let current_count = match self.output_mode {
-                SearchOutputMode::CountPerFile => {
-                    // In CountPerFile mode, limit by unique files, not matches
+            let current_count = match self.return_only {
+                ReturnMode::Counts => {
+                    // In Counts mode, limit by unique files, not matches
                     self.total_files.load(Ordering::SeqCst)
                 }
                 _ => {
-                    // In Full/FilesOnly modes, limit by matches
+                    // In Matches/Paths modes, limit by matches
                     self.total_matches.load(Ordering::SeqCst)
                 }
             };
@@ -92,10 +92,10 @@ impl ParallelVisitor for ContentSearchVisitor {
                                 return ignore::WalkState::Quit;
                             }
 
-                            // Mode-first branching: check output mode BEFORE reservation
-                            match self.output_mode {
-                                SearchOutputMode::Full => {
-                                    // Full mode: Always adds result
+                            // Mode-first branching: check return mode BEFORE reservation
+                            match self.return_only {
+                                ReturnMode::Matches => {
+                                    // Matches mode: Always adds result
                                     // Reserve slot, then add
                                     match self.total_matches.fetch_update(
                                         Ordering::SeqCst,
@@ -125,8 +125,8 @@ impl ParallelVisitor for ContentSearchVisitor {
                                     }
                                 }
 
-                                SearchOutputMode::FilesOnly => {
-                                    // FilesOnly mode: Deduplicate BEFORE reserving
+                                ReturnMode::Paths => {
+                                    // Paths mode: Deduplicate BEFORE reserving
                                     let mut seen = self.seen_files.blocking_write();
                                     if !seen.contains(&result.file) {
                                         // File not seen yet - try to reserve
@@ -178,8 +178,8 @@ impl ParallelVisitor for ContentSearchVisitor {
                                     // else: already seen this file, skip entirely
                                 }
 
-                                SearchOutputMode::CountPerFile => {
-                                    // CountPerFile mode: Use total_files for limiting
+                                ReturnMode::Counts => {
+                                    // Counts mode: Use total_files for limiting
                                     // DO NOT touch total_matches during search
                                     // (finalization at line 604 will set total_matches = total_files)
 

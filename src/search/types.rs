@@ -1,5 +1,5 @@
 // Re-export enums for internal use
-pub use kodegen_mcp_schema::filesystem::{SearchType, CaseMode, BoundaryMode, EngineChoice as Engine, BinaryMode, SortBy, SortDirection, SearchOutputMode};
+pub use kodegen_mcp_schema::filesystem::{SearchIn, ReturnMode, CaseMode, BoundaryMode, EngineChoice as Engine, BinaryMode, SortBy, SortDirection};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -22,7 +22,7 @@ pub struct FileCountData {
 pub struct SearchSessionOptions {
     pub root_path: String,
     pub pattern: String,
-    pub search_type: SearchType,
+    pub search_in: SearchIn,
     pub file_pattern: Option<String>,
     /// File types to include (rg --type)
     pub r#type: Vec<String>,
@@ -45,8 +45,8 @@ pub struct SearchSessionOptions {
     /// - `Some(BoundaryMode::Word)`: Match whole words only (\bpattern\b)
     /// - `Some(BoundaryMode::Line)`: Match complete lines only (^pattern$)
     pub boundary_mode: Option<BoundaryMode>,
-    /// Output mode - determines result format (default: Full)
-    pub output_mode: SearchOutputMode,
+    /// What to return from search
+    pub return_only: ReturnMode,
     /// Invert match - show lines/files that DON'T match the pattern
     pub invert_match: bool,
     /// Regex engine choice (default: Auto)
@@ -71,8 +71,6 @@ pub struct SearchSessionOptions {
     pub max_depth: Option<usize>,
     /// Return only the matched portion of text, not the entire line
     pub only_matching: bool,
-    /// List all files without searching (like rg --files)
-    pub list_files_only: bool,
     /// Sort results by specified criterion (None = no sorting, filesystem order)
     pub sort_by: Option<SortBy>,
     /// Sort direction (default: Ascending if `sort_by` is specified)
@@ -163,7 +161,7 @@ pub struct SearchSession {
     pub last_read_time_atomic: Arc<AtomicU64>,
     pub start_time: Instant,
     pub was_incomplete: Arc<RwLock<bool>>,
-    pub search_type: SearchType,
+    pub search_in: SearchIn,
     pub pattern: String,
     /// Timeout in milliseconds (if specified)
     pub timeout_ms: Option<u64>,
@@ -173,18 +171,18 @@ pub struct SearchSession {
     pub errors: Arc<RwLock<Vec<SearchError>>>,
     /// Effective maximum results for this search (after applying defaults/caps)
     pub max_results: usize,
-    /// Output mode for this search
-    pub output_mode: SearchOutputMode,
-    /// Deduplication set for `FilesOnly` mode
+    /// What to return from this search
+    pub return_only: ReturnMode,
+    /// Deduplication set for `Paths` mode
     pub seen_files: Arc<RwLock<HashSet<String>>>,
-    /// Count aggregation for `CountPerFile` mode
+    /// Count aggregation for `Counts` mode
     pub file_counts: Arc<RwLock<HashMap<String, FileCountData>>>,
 }
 
 /// Response for `start_search`
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct StartSearchResponse {
-    pub session_id: String,
+    pub search_id: String,
     pub is_complete: bool,
     pub is_error: bool,
     pub results: Vec<SearchResult>,
@@ -203,7 +201,7 @@ pub struct StartSearchResponse {
 /// Response for `get_search_results`
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct GetMoreSearchResultsResponse {
-    pub session_id: String,
+    pub search_id: String,
     pub results: Vec<SearchResult>,
     pub returned_count: usize,
     pub total_results: usize,
@@ -230,7 +228,7 @@ pub struct GetMoreSearchResultsResponse {
 /// Session information for `list_searches` tool
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SearchSessionInfo {
-    /// Unique session ID
+    /// Unique search ID
     pub id: String,
 
     /// Search type: "files" or "content"

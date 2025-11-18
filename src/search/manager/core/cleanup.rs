@@ -33,7 +33,7 @@ pub async fn cleanup_sessions(sessions: &RwLock<HashMap<String, SearchSession>>)
     let mut sessions_guard = sessions.write().await;
     let initial_count = sessions_guard.len();
 
-    sessions_guard.retain(|session_id, session| {
+    sessions_guard.retain(|search_id, session| {
         // LOCK-FREE atomic loads
         let is_complete = session.is_complete.load(Ordering::Acquire);
 
@@ -59,7 +59,7 @@ pub async fn cleanup_sessions(sessions: &RwLock<HashMap<String, SearchSession>>)
             } else {
                 "active but no reads for 5min"
             };
-            log::debug!("Cleaning up search session {session_id}: {reason}");
+            log::debug!("Cleaning up search session {search_id}: {reason}");
         }
 
         should_keep

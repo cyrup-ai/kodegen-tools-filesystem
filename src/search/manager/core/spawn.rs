@@ -1,6 +1,6 @@
 //! Background task spawning and timeout monitoring
 
-use super::super::super::types::{SearchSession, SearchSessionOptions, SearchType};
+use super::super::super::types::{SearchSession, SearchSessionOptions, SearchIn};
 use super::super::context::SearchContext;
 
 use std::collections::HashMap;
@@ -11,7 +11,7 @@ use tokio::sync::{RwLock, watch};
 
 /// Spawn background search task using ripgrep libraries
 pub fn spawn_search_task(
-    session_id: String,
+    search_id: String,
     options: SearchSessionOptions,
     root: PathBuf,
     cancellation_rx: watch::Receiver<bool>,
@@ -22,23 +22,21 @@ pub fn spawn_search_task(
     // Spawn the actual search task
     let search_handle = tokio::task::spawn_blocking({
         let sessions = Arc::clone(&sessions);
-        let session_id = session_id.clone();
+        let search_id = search_id.clone();
         move || {
             // Get session references and create context
-            let (mut ctx, search_type) = {
+            let (mut ctx, search_in) = {
                 let sessions_guard = sessions.blocking_read();
-                if let Some(session) = sessions_guard.get(&session_id) {
+                if let Some(session) = sessions_guard.get(&search_id) {
                     let ctx = SearchContext::from_session(session, cancellation_rx);
-                    (ctx, session.search_type.clone())
+                    (ctx, session.search_in)
                 } else {
                     return; // Session not found
                 }
             };
 
-            // Branch based on list_files_only or search type
-            if options.list_files_only {
-                super::super::files_mode::execute(&options, &root, &mut ctx);
-            } else if search_type == SearchType::Content {
+            // Branch based on search type
+            if search_in == SearchIn::Content {
                 super::super::content_search::execute(&options, &root, &mut ctx);
             } else {
                 super::super::file_search::execute(&options, &root, &mut ctx);
@@ -58,10 +56,10 @@ pub fn spawn_search_task(
                 }
                 Err(_elapsed) => {
                     // Timeout occurred - send cancellation signal
-                    log::warn!("Search session {session_id} timed out");
+                    log::warn!("Search session {search_id} timed out");
 
                     let sessions_guard = sessions.read().await;
-                    if let Some(session) = sessions_guard.get(&session_id) {
+                    if let Some(session) = sessions_guard.get(&search_id) {
                         // Only proceed if session still exists
                         let _ = session.cancellation_tx.send(true);
 
@@ -70,7 +68,7 @@ pub fn spawn_search_task(
                             *incomplete = true;
                         }
                     } else {
-                        log::debug!("Timeout fired but session {session_id} already cleaned up");
+                        log::debug!("Timeout fired but session {search_id} already cleaned up");
                     }
                 }
             }

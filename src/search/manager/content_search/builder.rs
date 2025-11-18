@@ -1,6 +1,6 @@
 //! Builder for content search parallel visitors
 
-use super::super::super::types::{SearchError, SearchOutputMode, SearchResult};
+use super::super::super::types::{SearchError, ReturnMode, SearchResult};
 use super::super::config::RESULT_BUFFER_SIZE;
 use super::{ContentSearchVisitor, ErrorVisitor};
 use crate::search::rg::PatternMatcher;
@@ -16,7 +16,7 @@ pub(in super::super) struct ContentSearchBuilder {
     pub(super) hi_args: Arc<super::super::super::rg::flags::hiargs::HiArgs>,
     pub(super) matcher: PatternMatcher,
     pub(super) max_results: Option<usize>,
-    pub(super) output_mode: SearchOutputMode,
+    pub(super) return_only: ReturnMode,
     pub(super) results: Arc<RwLock<Vec<SearchResult>>>,
     pub(super) total_matches: Arc<AtomicUsize>,
     pub(super) total_files: Arc<AtomicUsize>,
@@ -26,9 +26,9 @@ pub(in super::super) struct ContentSearchBuilder {
     pub(super) was_incomplete: Arc<RwLock<bool>>,
     pub(super) error_count: Arc<AtomicUsize>,
     pub(super) errors: Arc<RwLock<Vec<SearchError>>>,
-    // Deduplication for FilesOnly mode
+    // Deduplication for Paths mode
     pub(super) seen_files: Arc<RwLock<HashSet<String>>>,
-    // Aggregation for CountPerFile mode
+    // Aggregation for Counts mode
     pub(super) file_counts: Arc<RwLock<HashMap<String, super::super::super::types::FileCountData>>>,
     pub(super) start_time: Instant,
 }
@@ -84,7 +84,7 @@ impl<'s> ParallelVisitorBuilder<'s> for ContentSearchBuilder {
             worker,
             haystack_builder,
             max_results: self.max_results,
-            output_mode: self.output_mode,
+            return_only: self.return_only,
             results: Arc::clone(&self.results),
             total_matches: Arc::clone(&self.total_matches),
             total_files: Arc::clone(&self.total_files),

@@ -60,7 +60,7 @@ impl Tool for GetMoreSearchResultsTool {
     async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
         let response = self
             .manager
-            .get_results(&args.session_id, args.offset, args.length)
+            .get_results(&args.search_id, args.offset, args.length)
             .await?;
 
         let mut contents = Vec::new();
@@ -78,9 +78,9 @@ impl Tool for GetMoreSearchResultsTool {
 
         // Build formatted summary with icons and color
         let summary = format!(
-            "\x1b[36m󰆼 Search results: {} matches\x1b[0m\n 󰓎 Session: {} · Status: {}\n 󰘖 Showing: {} of {} total results",
+            "\x1b[36m󰆼 Search results: {} matches\x1b[0m\n 󰓎 Search: {} · Status: {}\n 󰘖 Showing: {} of {} total results",
             response.total_matches,
-            response.session_id,
+            response.search_id,
             status,
             response.returned_count,
             response.total_results
@@ -91,7 +91,7 @@ impl Tool for GetMoreSearchResultsTool {
         // Content 2: JSON metadata
         let metadata = json!({
             "success": true,
-            "session_id": response.session_id,
+            "search_id": response.search_id,
             "results": response.results,
             "returned_count": response.returned_count,
             "total_results": response.total_results,
@@ -130,11 +130,11 @@ impl Tool for GetMoreSearchResultsTool {
                 content: PromptMessageContent::text(
                     "Use get_search_results to read results from a search started with start_search:\n\n\
                      1. Read first 100 results:\n\
-                        get_search_results({\"session_id\": \"search_1_123\", \"offset\": 0, \"length\": 100})\n\n\
+                        get_search_results({\"search_id\": \"search_1_123\", \"offset\": 0, \"length\": 100})\n\n\
                      2. Read next page:\n\
-                        get_search_results({\"session_id\": \"search_1_123\", \"offset\": 100, \"length\": 100})\n\n\
+                        get_search_results({\"search_id\": \"search_1_123\", \"offset\": 100, \"length\": 100})\n\n\
                      3. Read last 20 results:\n\
-                        get_search_results({\"session_id\": \"search_1_123\", \"offset\": -20})\n\n\
+                        get_search_results({\"search_id\": \"search_1_123\", \"offset\": -20})\n\n\
                      The response shows:\n\
                      - Current search status (IN PROGRESS or COMPLETED)\n\
                      - Results in the requested range\n\
