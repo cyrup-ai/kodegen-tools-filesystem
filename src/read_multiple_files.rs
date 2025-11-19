@@ -85,7 +85,7 @@ impl ReadMultipleFilesTool {
                             .and_then(|v| v.as_str())
                             .map(String::from)
                             .or_else(|| {
-                                contents.first().and_then(|c| {
+                                contents.get(1).and_then(|c| {
                                     if let rmcp::model::RawContent::Text(text_content) = &c.raw {
                                         Some(text_content.text.clone())
                                     } else {
@@ -105,7 +105,7 @@ impl ReadMultipleFilesTool {
                 // Fallback if parsing fails
                 MultiFileResult {
                     path,
-                    content: contents.first().and_then(|c| {
+                    content: contents.get(1).and_then(|c| {
                         if let rmcp::model::RawContent::Text(text_content) = &c.raw {
                             Some(text_content.text.clone())
                         } else {

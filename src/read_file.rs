@@ -349,9 +349,10 @@ impl Tool for ReadFileTool {
             )
         };
         contents.push(Content::text(summary));
+        contents.push(Content::text(content.to_string()));
 
         // ========================================
-        // Content[1]: Machine-Parseable JSON
+        // Content[2]: Machine-Parseable JSON
         // ========================================
         let metadata = json!({
             "success": true,
