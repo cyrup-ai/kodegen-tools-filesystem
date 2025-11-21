@@ -11,5 +11,5 @@ mod visitor_impl;
 
 pub(super) use builder::ContentSearchBuilder;
 pub(super) use error_visitor::ErrorVisitor;
-pub(super) use execute::execute;
+pub use execute::execute;
 pub(super) use visitor_core::ContentSearchVisitor;

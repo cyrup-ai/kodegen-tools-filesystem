@@ -5,9 +5,8 @@ use crate::search::manager::config::RESULT_BUFFER_SIZE;
 use crate::search::types::{CaseMode, SearchResult};
 use ignore::{ParallelVisitor, ParallelVisitorBuilder};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
-use std::time::Instant;
-use tokio::sync::{RwLock, watch};
+use std::sync::atomic::{AtomicBool, AtomicUsize};
+use tokio::sync::RwLock;
 
 /// Parallel visitor builder for file search
 pub(super) struct FileSearchBuilder {
@@ -22,13 +21,8 @@ pub(super) struct FileSearchBuilder {
     pub(super) early_term_triggered: Arc<AtomicBool>,
     pub(super) results: Arc<RwLock<Vec<SearchResult>>>,
     pub(super) total_matches: Arc<AtomicUsize>,
-    pub(super) last_read_time_atomic: Arc<AtomicU64>,
-    pub(super) cancellation_rx: watch::Receiver<bool>,
-    pub(super) first_result_tx: watch::Sender<bool>,
-    pub(super) was_incomplete: Arc<RwLock<bool>>,
     pub(super) error_count: Arc<AtomicUsize>,
     pub(super) errors: Arc<RwLock<Vec<crate::search::types::SearchError>>>,
-    pub(super) start_time: Instant,
 }
 
 impl<'s> ParallelVisitorBuilder<'s> for FileSearchBuilder {
@@ -45,16 +39,9 @@ impl<'s> ParallelVisitorBuilder<'s> for FileSearchBuilder {
             early_term_triggered: Arc::clone(&self.early_term_triggered),
             results: Arc::clone(&self.results),
             total_matches: Arc::clone(&self.total_matches),
-            last_read_time_atomic: Arc::clone(&self.last_read_time_atomic),
-            cancellation_rx: self.cancellation_rx.clone(),
-            first_result_tx: self.first_result_tx.clone(),
-            was_incomplete: Arc::clone(&self.was_incomplete),
             error_count: Arc::clone(&self.error_count),
             errors: Arc::clone(&self.errors),
             buffer: Vec::with_capacity(RESULT_BUFFER_SIZE),
-            last_update_time: Instant::now(),
-            matches_since_update: 0,
-            start_time: self.start_time,
         })
     }
 }

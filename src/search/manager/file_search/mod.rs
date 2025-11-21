@@ -8,4 +8,4 @@ pub(super) mod execute;
 mod visitor;
 
 // Re-export the execute function for easier access from parent module
-pub(in crate::search::manager) use execute::execute;
+pub use execute::execute;

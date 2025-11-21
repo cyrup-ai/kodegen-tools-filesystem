@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 /// Execute content search using grep libraries with parallel directory traversal
-pub(in super::super) fn execute(
+pub fn execute(
     options: &super::super::super::types::SearchSessionOptions,
     root: &std::path::PathBuf,
     ctx: &mut super::super::context::SearchContext,
@@ -126,9 +126,9 @@ pub(in super::super) fn execute(
     let hi_args = match HiArgs::from_low_args(low_args) {
         Ok(h) => h,
         Err(e) => {
-            *ctx.error.blocking_write() = Some(format!("Failed to build HiArgs: {e}"));
-            *ctx.is_error.blocking_write() = true;
-            ctx.is_complete.store(true, Ordering::Release);
+            ctx.error = Some(format!("Failed to build HiArgs: {e}"));
+            ctx.is_error = true;
+            ctx.is_complete = true;
             return;
         }
     };
@@ -137,9 +137,9 @@ pub(in super::super) fn execute(
     let matcher = match hi_args.matcher() {
         Ok(m) => m,
         Err(e) => {
-            *ctx.error.blocking_write() = Some(format!("Failed to build matcher: {e}"));
-            *ctx.is_error.blocking_write() = true;
-            ctx.is_complete.store(true, Ordering::Release);
+            ctx.error = Some(format!("Failed to build matcher: {e}"));
+            ctx.is_error = true;
+            ctx.is_complete = true;
             return;
         }
     };
@@ -163,15 +163,10 @@ pub(in super::super) fn execute(
         results: Arc::clone(&ctx.results),
         total_matches: Arc::clone(&ctx.total_matches),
         total_files: Arc::clone(&ctx.total_files),
-        last_read_time_atomic: Arc::clone(&ctx.last_read_time_atomic),
-        cancellation_rx: ctx.cancellation_rx.clone(),
-        first_result_tx: ctx.first_result_tx.clone(),
-        was_incomplete: Arc::clone(&ctx.was_incomplete),
         error_count: Arc::clone(&ctx.error_count),
         errors: Arc::clone(&ctx.errors),
         seen_files: Arc::clone(&ctx.seen_files),
         file_counts: Arc::clone(&ctx.file_counts),
-        start_time: ctx.start_time,
     };
 
     // Execute parallel search
@@ -235,7 +230,7 @@ pub(in super::super) fn execute(
     }
 
     // Mark complete
-    ctx.is_complete.store(true, Ordering::Release);
+    ctx.is_complete = true;
 }
 
 /// Convert MCP API `Engine` to ripgrep's internal `Engine`

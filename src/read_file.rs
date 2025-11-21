@@ -1,8 +1,7 @@
 use crate::validate_path;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use kodegen_mcp_schema::filesystem::{FsReadFileArgs, FsReadFilePromptArgs};
-use kodegen_mcp_tool::Tool;
-use kodegen_mcp_tool::error::McpError;
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use mime_guess::from_path;
 use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use serde_json::{Value, json};
@@ -306,7 +305,7 @@ impl Tool for ReadFileTool {
         true // Can read from URLs
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         // Auto-detect URL if not specified
         let is_url =
             args.is_url || args.path.starts_with("http://") || args.path.starts_with("https://");

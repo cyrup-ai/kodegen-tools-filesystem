@@ -7,9 +7,8 @@ use crate::search::rg::PatternMatcher;
 use ignore::ParallelVisitorBuilder;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize};
-use std::time::Instant;
-use tokio::sync::{RwLock, watch};
+use std::sync::atomic::AtomicUsize;
+use tokio::sync::RwLock;
 
 /// Parallel visitor builder for content search
 pub(in super::super) struct ContentSearchBuilder {
@@ -20,17 +19,12 @@ pub(in super::super) struct ContentSearchBuilder {
     pub(super) results: Arc<RwLock<Vec<SearchResult>>>,
     pub(super) total_matches: Arc<AtomicUsize>,
     pub(super) total_files: Arc<AtomicUsize>,
-    pub(super) last_read_time_atomic: Arc<AtomicU64>,
-    pub(super) cancellation_rx: watch::Receiver<bool>,
-    pub(super) first_result_tx: watch::Sender<bool>,
-    pub(super) was_incomplete: Arc<RwLock<bool>>,
     pub(super) error_count: Arc<AtomicUsize>,
     pub(super) errors: Arc<RwLock<Vec<SearchError>>>,
     // Deduplication for Paths mode
     pub(super) seen_files: Arc<RwLock<HashSet<String>>>,
     // Aggregation for Counts mode
     pub(super) file_counts: Arc<RwLock<HashMap<String, super::super::super::types::FileCountData>>>,
-    pub(super) start_time: Instant,
 }
 
 impl<'s> ParallelVisitorBuilder<'s> for ContentSearchBuilder {
@@ -52,7 +46,6 @@ impl<'s> ParallelVisitorBuilder<'s> for ContentSearchBuilder {
                     error_message: format!("Searcher initialization failed: {e}"),
                     error_count: Arc::clone(&self.error_count),
                     errors: Arc::clone(&self.errors),
-                    was_incomplete: Arc::clone(&self.was_incomplete),
                 });
             }
         };
@@ -72,7 +65,6 @@ impl<'s> ParallelVisitorBuilder<'s> for ContentSearchBuilder {
                     error_message: format!("SearchWorker initialization failed: {e}"),
                     error_count: Arc::clone(&self.error_count),
                     errors: Arc::clone(&self.errors),
-                    was_incomplete: Arc::clone(&self.was_incomplete),
                 });
             }
         };
@@ -88,18 +80,11 @@ impl<'s> ParallelVisitorBuilder<'s> for ContentSearchBuilder {
             results: Arc::clone(&self.results),
             total_matches: Arc::clone(&self.total_matches),
             total_files: Arc::clone(&self.total_files),
-            last_read_time_atomic: Arc::clone(&self.last_read_time_atomic),
-            cancellation_rx: self.cancellation_rx.clone(),
-            first_result_tx: self.first_result_tx.clone(),
-            was_incomplete: Arc::clone(&self.was_incomplete),
             error_count: Arc::clone(&self.error_count),
             errors: Arc::clone(&self.errors),
             seen_files: Arc::clone(&self.seen_files),
             file_counts: Arc::clone(&self.file_counts),
-            start_time: self.start_time,
             buffer: Vec::with_capacity(RESULT_BUFFER_SIZE),
-            last_update_time: Instant::now(),
-            matches_since_update: 0,
         })
     }
 }

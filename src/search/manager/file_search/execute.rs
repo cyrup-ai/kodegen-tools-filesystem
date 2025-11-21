@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 /// Execute file search using walker with parallel directory traversal
-pub(in crate::search::manager) fn execute(
+pub fn execute(
     options: &crate::search::types::SearchSessionOptions,
     root: &std::path::PathBuf,
     ctx: &mut crate::search::manager::context::SearchContext,
@@ -59,7 +59,7 @@ pub(in crate::search::manager) fn execute(
         Ok(h) => Arc::new(h),
         Err(e) => {
             log::error!("Failed to build HiArgs: {e}");
-            ctx.is_complete.store(true, std::sync::atomic::Ordering::Release);
+            ctx.is_complete = true;
             return;
         }
     };
@@ -84,13 +84,8 @@ pub(in crate::search::manager) fn execute(
         early_term_triggered: Arc::new(AtomicBool::new(false)),
         results: Arc::clone(&ctx.results),
         total_matches: Arc::clone(&ctx.total_matches),
-        last_read_time_atomic: Arc::clone(&ctx.last_read_time_atomic),
-        cancellation_rx: ctx.cancellation_rx.clone(),
-        first_result_tx: ctx.first_result_tx.clone(),
-        was_incomplete: Arc::clone(&ctx.was_incomplete),
         error_count: Arc::clone(&ctx.error_count),
         errors: Arc::clone(&ctx.errors),
-        start_time: ctx.start_time,
     };
 
     // Execute parallel search
@@ -108,5 +103,5 @@ pub(in crate::search::manager) fn execute(
     }
 
     // Mark complete
-    ctx.is_complete.store(true, Ordering::Release);
+    ctx.is_complete = true;
 }

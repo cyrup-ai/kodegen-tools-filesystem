@@ -1,7 +1,6 @@
 use crate::validate_path;
 use kodegen_mcp_schema::filesystem::{FsCreateDirectoryArgs, FsCreateDirectoryPromptArgs};
-use kodegen_mcp_tool::Tool;
-use kodegen_mcp_tool::error::McpError;
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use serde_json::json;
 use tokio::fs;
@@ -51,7 +50,7 @@ impl Tool for CreateDirectoryTool {
         true // Can be called multiple times safely
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
 
         fs::create_dir_all(&valid_path).await?;

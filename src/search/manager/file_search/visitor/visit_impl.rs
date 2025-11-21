@@ -8,13 +8,6 @@ use std::sync::atomic::Ordering;
 
 impl ParallelVisitor for FileSearchVisitor {
     fn visit(&mut self, entry: Result<DirEntry, ignore::Error>) -> ignore::WalkState {
-        // Check for cancellation
-        if *self.cancellation_rx.borrow() {
-            self.flush_buffer();
-            *self.was_incomplete.blocking_write() = true;
-            return ignore::WalkState::Quit;
-        }
-
         // Fast check - if another thread already found exact match, quit immediately
         if self.early_termination && self.early_term_triggered.load(Ordering::Acquire) {
             self.flush_buffer();
@@ -111,8 +104,7 @@ impl ParallelVisitor for FileSearchVisitor {
                             };
 
                             self.add_result(search_result);
-                            self.maybe_update_last_read_time();
-                            
+
                             // Flush and quit immediately
                             self.flush_buffer();
                             return ignore::WalkState::Quit;
@@ -161,7 +153,6 @@ impl ParallelVisitor for FileSearchVisitor {
                     };
 
                     self.add_result(search_result);
-                    self.maybe_update_last_read_time();
                 }
                 Err(_) => {
                     // Limit reached - quit searching

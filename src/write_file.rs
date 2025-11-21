@@ -1,7 +1,6 @@
 use crate::validate_path;
 use kodegen_mcp_schema::filesystem::{FsWriteFileArgs, FsWriteFilePromptArgs};
-use kodegen_mcp_tool::Tool;
-use kodegen_mcp_tool::error::McpError;
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use serde_json::json;
 use tokio::fs;
@@ -54,7 +53,7 @@ impl Tool for WriteFileTool {
         false // Each write changes the file
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
 
         // Create parent directories if needed

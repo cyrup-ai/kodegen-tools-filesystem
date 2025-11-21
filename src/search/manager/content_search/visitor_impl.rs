@@ -11,13 +11,6 @@ impl ParallelVisitor for ContentSearchVisitor {
 
         log::debug!("ContentSearchVisitor::visit() called");
 
-        // Check for cancellation
-        if *self.cancellation_rx.borrow() {
-            self.flush_buffer();
-            *self.was_incomplete.blocking_write() = true;
-            return ignore::WalkState::Quit;
-        }
-
         // Check if we've reached max results (mode-aware)
         if let Some(max) = self.max_results {
             let current_count = match self.return_only {
@@ -84,14 +77,7 @@ impl ParallelVisitor for ContentSearchVisitor {
                             result.created = created;
                         }
 
-                        for (i, result) in results.into_iter().enumerate() {
-                            // Check cancellation every 100 results to balance responsiveness vs overhead
-                            if i % 100 == 0 && *self.cancellation_rx.borrow() {
-                                self.flush_buffer();
-                                *self.was_incomplete.blocking_write() = true;
-                                return ignore::WalkState::Quit;
-                            }
-
+                        for result in results.into_iter() {
                             // Mode-first branching: check return mode BEFORE reservation
                             match self.return_only {
                                 ReturnMode::Matches => {
@@ -115,7 +101,6 @@ impl ParallelVisitor for ContentSearchVisitor {
                                         Ok(_) => {
                                             // Use buffered approach for better performance
                                             self.add_result(result);
-                                            self.maybe_update_last_read_time();
                                         }
                                         Err(_) => {
                                             // Limit reached
@@ -165,7 +150,6 @@ impl ParallelVisitor for ContentSearchVisitor {
                                                 };
                                                 // Use buffered approach for better performance
                                                 self.add_result(file_result);
-                                                self.maybe_update_last_read_time();
                                             }
                                             Err(_) => {
                                                 // Hit limit - quit immediately
@@ -215,11 +199,6 @@ impl ParallelVisitor for ContentSearchVisitor {
                                                         created: result.created,
                                                     },
                                                 );
-
-                                                // Update timestamp
-                                                let elapsed_micros = self.start_time.elapsed().as_micros() as u64;
-                                                self.last_read_time_atomic
-                                                    .store(elapsed_micros, Ordering::Relaxed);
                                             }
                                             Err(_) => {
                                                 // Hit file limit - stop search immediately
@@ -232,11 +211,6 @@ impl ParallelVisitor for ContentSearchVisitor {
                                         // Existing file - just increment its match count (no limit check needed)
                                         if let Some(data) = counts.get_mut(&result.file) {
                                             data.count += 1;
-
-                                            // Update timestamp
-                                            let elapsed_micros = self.start_time.elapsed().as_micros() as u64;
-                                            self.last_read_time_atomic
-                                                .store(elapsed_micros, Ordering::Relaxed);
                                         }
                                     }
                                     // Write lock released here automatically

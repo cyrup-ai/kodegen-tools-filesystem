@@ -1,7 +1,6 @@
 use crate::validate_path;
 use kodegen_mcp_schema::filesystem::{FsListDirectoryArgs, FsListDirectoryPromptArgs};
-use kodegen_mcp_tool::Tool;
-use kodegen_mcp_tool::error::McpError;
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use log::warn;
 use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use serde_json::json;
@@ -45,7 +44,7 @@ impl Tool for ListDirectoryTool {
         true
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
 
         let mut entries = fs::read_dir(&valid_path).await?;

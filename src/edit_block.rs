@@ -1,8 +1,7 @@
 use crate::validate_path;
 use chrono::Utc;
 use kodegen_mcp_schema::filesystem::{FsEditBlockArgs, FsEditBlockPromptArgs};
-use kodegen_mcp_tool::Tool;
-use kodegen_mcp_tool::error::McpError;
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use kodegen_utils::char_analysis::CharCodeData;
 use kodegen_utils::char_diff::CharDiff;
 use kodegen_utils::edit_log::{EditBlockLogEntry, EditBlockResult, get_edit_logger};
@@ -86,7 +85,7 @@ impl Tool for EditBlockTool {
         false // Each replacement changes content
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         let start_time = Instant::now(); // START TIMER
 
         // Validate inputs

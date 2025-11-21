@@ -12,7 +12,6 @@ pub(in super::super) struct ErrorVisitor {
     pub(super) error_message: String,
     pub(super) error_count: Arc<AtomicUsize>,
     pub(super) errors: Arc<RwLock<Vec<SearchError>>>,
-    pub(super) was_incomplete: Arc<RwLock<bool>>,
 }
 
 impl ParallelVisitor for ErrorVisitor {
@@ -26,7 +25,6 @@ impl ParallelVisitor for ErrorVisitor {
                 message: self.error_message.clone(),
                 error_type: "initialization_error".to_string(),
             });
-            *self.was_incomplete.blocking_write() = true;
         }
 
         // Immediately quit to prevent further thread spawning

@@ -1,25 +1,31 @@
-use kodegen_mcp_schema::filesystem::{FsStartSearchArgs, FsStartSearchPromptArgs};
-use kodegen_mcp_tool::Tool;
-use kodegen_mcp_tool::error::McpError;
+use kodegen_mcp_schema::filesystem::{FsSearchArgs, FsSearchPromptArgs};
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use serde_json::json;
-use std::sync::Arc;
+use std::time::Instant;
+use anyhow;
 
-use super::{SearchManager, SearchSessionOptions, SearchIn, ReturnMode, CaseMode, BoundaryMode};
+use super::types::{SearchIn, ReturnMode, CaseMode, BoundaryMode, SearchSessionOptions};
+use super::manager::{content_search, file_search, context::SearchContext};
+use std::path::PathBuf;
 
 // ============================================================================
 // TOOL STRUCT
 // ============================================================================
 
 #[derive(Clone)]
-pub struct StartSearchTool {
-    manager: Arc<SearchManager>,
+pub struct FsSearchTool;
+
+impl FsSearchTool {
+    #[must_use]
+    pub fn new() -> Self {
+        Self
+    }
 }
 
-impl StartSearchTool {
-    #[must_use]
-    pub fn new(manager: Arc<SearchManager>) -> Self {
-        Self { manager }
+impl Default for FsSearchTool {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -27,22 +33,22 @@ impl StartSearchTool {
 // TOOL IMPLEMENTATION
 // ============================================================================
 
-impl Tool for StartSearchTool {
-    type Args = FsStartSearchArgs;
-    type PromptArgs = FsStartSearchPromptArgs;
+impl Tool for FsSearchTool {
+    type Args = FsSearchArgs;
+    type PromptArgs = FsSearchPromptArgs;
 
     fn name() -> &'static str {
-        kodegen_mcp_schema::filesystem::FS_START_SEARCH
+        kodegen_mcp_schema::filesystem::FS_SEARCH
     }
 
     fn description() -> &'static str {
-        "🚀 BLAZING-FAST SEARCH (10-100x faster than grep). Respects .gitignore automatically.\n\n\
-         QUICK START - Smart defaults mean most searches just work:\n\
-         • Find TODO comments:              fs_start_search(pattern='TODO')\n\
-         • Find package.json:               fs_start_search(pattern='package.json', search_in='filenames')\n\
-         • Get paths with 'error':          fs_start_search(pattern='error', return_only='paths')\n\
-         • Count imports per file:          fs_start_search(pattern='^import', return_only='counts')\n\n\
-         PARAMETERS - TWO INDEPENDENT CONTROLS:\n\n\
+        "🚀 BLAZING-FAST SEARCH (10-100x faster than grep). Respects .gitignore automatically. Built on ripgrep.\n\n\
+         QUICK START:\n\
+         • Find files: fs_search(pattern='package.json', search_in='filenames')\n\
+         • Find TODO comments: fs_search(pattern='TODO')\n\
+         • Get paths with 'error': fs_search(pattern='error', return_only='paths')\n\
+         • Count imports per file: fs_search(pattern='^import', return_only='counts')\n\n\
+         COMPREHENSIVE PARAMETERS:\n\n\
          1. search_in: WHERE to search (default: 'content')\n\
             • 'content' - Search inside file contents (default, like `rg PATTERN`)\n\
             • 'filenames' - Search file names/paths\n\n\
@@ -75,9 +81,6 @@ impl Tool for StartSearchTool {
          1. Start filename search: search_in=\"filenames\", pattern=\"auth\"\n\
          2. Simultaneously start content search: search_in=\"content\", pattern=\"authentication\"\n\
          3. Present combined results: \"Found 3 auth-related files and 8 files containing authentication code\"\n\n\
-         SEARCH LOCATIONS:\n\
-         - search_in=\"filenames\": Find files by name (pattern matches file names)\n\
-         - search_in=\"content\": Search inside files for text patterns (default)\n\n\
          PATTERN MATCHING MODES:\n\
          - Default (literal_search=false): Patterns are regex (matches ripgrep behavior)\n\
          - Literal mode (literal_search=true): Patterns are treated as exact strings\n\
@@ -89,8 +92,7 @@ impl Tool for StartSearchTool {
              - Files: 'lib' matches 'lib.rs' but not 'libtest.rs'\n\
            * \"line\": Match complete lines only (uses ^ and $ anchors)\n\
              - Content: 'error' matches 'error' alone but not 'this error happened'\n\
-             - Files: Less useful but supported\n\
-         Note: Simple strings like \"start_crawl\" work as regex and will match literally\n\n\
+             - Files: Less useful but supported\n\n\
          IMPORTANT PARAMETERS:\n\
          - search_in: Where to search (\"content\" or \"filenames\", default: \"content\")\n\
          - return_only: What to return (\"matches\", \"paths\", or \"counts\", default: \"matches\")\n\
@@ -129,38 +131,21 @@ impl Tool for StartSearchTool {
            * Supports any encoding_rs name: utf8, utf16le, utf16be, latin1, shiftjis, gb2312, euckr, etc.\n\
            * Use when: Mojibake in results, legacy codebases, international projects\n\
            * Examples: encoding=\"utf16le\" for Windows files, encoding=\"shiftjis\" for Japanese code\n\n\
-         DECISION EXAMPLES:\n\
-         - \"find package.json\" → search_in=\"filenames\", pattern=\"package.json\" (specific file)\n\
-         - \"find authentication components\" → search_in=\"content\", pattern=\"authentication\" (looking for functionality)\n\
-         - \"locate all React components\" → search_in=\"filenames\", pattern=\"*.tsx\" or \"*.jsx\" (file pattern)\n\
-         - \"find TODO comments\" → pattern=\"TODO\" (defaults to content search)\n\
-         - \"show me login files\" → AMBIGUOUS → run both: filenames with \"login\" AND content with \"login\"\n\
-         - \"find config\" → AMBIGUOUS → run both: config files AND files containing config code\n\n\
          COMPREHENSIVE SEARCH EXAMPLES:\n\
          - Find package.json files: search_in=\"filenames\", pattern=\"package.json\"\n\
          - Find all JS files: search_in=\"filenames\", pattern=\"*.js\"\n\
          - Search for TODO in code: pattern=\"TODO\", file_pattern=\"*.js|*.ts\" (content search is default)\n\
          - Search for exact code: pattern=\"toast.error('test')\", literal_search=true\n\
          - Search whole words: pattern=\"test\", boundary_mode=\"word\"\n\
-           (matches 'test()' and 'test ' but not 'testing' or 'attest')\n\
          - Find exact filename: search_in=\"filenames\", pattern=\"lib\", boundary_mode=\"word\"\n\
-           (matches 'lib.rs' but not 'libtest.rs')\n\
          - Match complete lines: pattern=\"error\", boundary_mode=\"line\"\n\
-           (matches 'error' alone but not 'this error happened' or '  error  ')\n\
-         - Ambiguous request \"find auth stuff\": Run two searches:\n\
-           1. search_in=\"filenames\", pattern=\"auth\"\n\
-           2. search_in=\"content\", pattern=\"authentication\"\n\
          - Extract URLs: pattern=\"https?://[^\\\\s]+\", only_matching=true\n\
-           (returns just \"https://example.com\" not full line)\n\
          - Extract function names: pattern=\"fn (\\\\w+)\\\\(\", only_matching=true\n\
          - Extract version numbers: pattern=\"\\\\d+\\\\.\\\\d+\\\\.\\\\d+\", only_matching=true\n\n\
          PRO TIP: When user requests are ambiguous about whether they want files or content,\n\
          run both searches concurrently and combine results for comprehensive coverage.\n\n\
-         Unlike regular search tools, this starts a background search process and returns\n\
-         immediately with a session ID. Use get_search_results to get results as they\n\
-         come in, and stop_search to stop the search early if needed.\n\n\
-         Perfect for large directories where you want to see results immediately and\n\
-         have the option to cancel if the search takes too long or you find what you need.\n\n\
+         This tool performs a blocking search and returns ALL results immediately.\n\
+         Perfect for most search tasks where you want complete results in a single response.\n\n\
          IMPORTANT: Always use absolute paths for reliability. Paths are automatically normalized regardless of slash direction. Relative paths may fail as they depend on the current working directory. Tilde paths (~/...) might not work in all contexts. Unless the user explicitly asks for relative paths, use absolute paths."
     }
 
@@ -176,7 +161,9 @@ impl Tool for StartSearchTool {
         false
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
+        let start_time = Instant::now();
+
         // Handle backward compatibility: ignore_case overrides case_mode if present
         let case_mode = if let Some(ignore_case) = args.ignore_case {
             if ignore_case {
@@ -235,7 +222,7 @@ impl Tool for StartSearchTool {
             file_pattern: args.file_pattern,
             r#type: args.r#type,
             type_not: args.type_not,
-            case_mode, // Changed from ignore_case
+            case_mode,
             max_results: args.max_results,
             include_hidden: args.include_hidden,
             no_ignore: args.no_ignore,
@@ -245,7 +232,7 @@ impl Tool for StartSearchTool {
             timeout_ms: args.timeout_ms,
             early_termination: args.early_termination,
             literal_search: args.literal_search,
-            boundary_mode, // Changed from word_boundary
+            boundary_mode,
             return_only: args.return_only,
             invert_match: args.invert_match,
             engine: args.engine,
@@ -262,19 +249,54 @@ impl Tool for StartSearchTool {
             encoding: args.encoding,
         };
 
-        let response = self.manager.start_search(options).await?;
+        // Prepare data for blocking task
+        let options_owned = options.clone();
+        let root = PathBuf::from(&args.path);
+        let search_in = args.search_in;
+        let max_results = options.max_results.map(|v| v as usize).unwrap_or(usize::MAX);
+        let return_only = options.return_only;
+
+        // Execute search in blocking threadpool to avoid blocking async runtime
+        // Extract all data inside spawn_blocking to avoid blocking operations in async context
+        let (results, errors, total_matches, total_files, error_count, is_complete, is_error, error) =
+            tokio::task::spawn_blocking(move || {
+                let mut ctx = SearchContext::new(max_results, return_only);
+                match search_in {
+                    SearchIn::Content => content_search::execute(&options_owned, &root, &mut ctx),
+                    SearchIn::Filenames => file_search::execute(&options_owned, &root, &mut ctx),
+                }
+
+                // Extract all data inside spawn_blocking (sync context)
+                let results = ctx.results().blocking_read().clone();
+                let errors = ctx.errors().blocking_read().clone();
+                let total_matches = ctx.total_matches();
+                let total_files = ctx.total_files();
+                let error_count = ctx.error_count_value();
+                let is_complete = ctx.is_complete;
+                let is_error = ctx.is_error;
+                let error = ctx.error.clone();
+
+                (results, errors, total_matches, total_files, error_count, is_complete, is_error, error)
+            })
+            .await
+            .map_err(|e| McpError::Other(anyhow::anyhow!("Search task panicked: {e}")))?;
+
+        let runtime_ms = start_time.elapsed().as_millis() as u64;
+        let total_results = results.len();
+
+        // Determine if results were limited
+        let max_results_value = args.max_results.map(|v| v as usize).unwrap_or(usize::MAX);
+        let results_limited = total_results >= max_results_value;
 
         let mut contents = Vec::new();
 
         // Content 1: Human-readable summary
-        let status = if response.is_complete {
-            if response.is_error {
-                "failed"
-            } else {
-                "completed"
-            }
+        let status = if is_error {
+            "failed"
+        } else if is_complete {
+            "completed"
         } else {
-            "running"
+            "incomplete"
         };
 
         let search_type_str = match args.search_in {
@@ -282,31 +304,48 @@ impl Tool for StartSearchTool {
             SearchIn::Content => "content",
         };
 
-        let summary = format!(
-            "\x1b[36m󰺮 Search started: {}\x1b[0m\n\
-             󰓎 Search ID: {} · Pattern: \"{}\"\n\
-             󰘖 Status: {} · {} initial results from {}",
-            search_type_str,
-            response.search_id,
-            args.pattern,
-            status,
-            response.total_results,
-            args.path
-        );
+        let summary = if is_error {
+            format!(
+                "\x1b[31m✗ Search failed: {}\x1b[0m\n\
+                 Pattern: \"{}\"\n\
+                 Error: {}",
+                search_type_str,
+                args.pattern,
+                error.as_deref().unwrap_or("Unknown error")
+            )
+        } else {
+            format!(
+                "\x1b[36m✓ Search completed: {}\x1b[0m\n\
+                 Pattern: \"{}\" · Status: {}\n\
+                 Results: {} · Matches: {} · Files: {} · Errors: {} · Time: {}ms{}",
+                search_type_str,
+                args.pattern,
+                status,
+                total_results,
+                total_matches,
+                total_files,
+                error_count,
+                runtime_ms,
+                if results_limited { " (limited)" } else { "" }
+            )
+        };
         contents.push(Content::text(summary));
 
         // Content 2: JSON metadata
         let metadata = json!({
-            "success": true,
-            "search_id": response.search_id,
-            "is_complete": response.is_complete,
-            "is_error": response.is_error,
-            "results": response.results,
-            "total_results": response.total_results,
-            "runtime_ms": response.runtime_ms,
-            "error_count": response.error_count,
-            "max_results": response.max_results,
-            "results_limited": response.results_limited,
+            "success": !is_error,
+            "is_complete": is_complete,
+            "is_error": is_error,
+            "error": error,
+            "results": results.clone(),
+            "errors": errors.clone(),
+            "total_results": total_results,
+            "total_matches": total_matches,
+            "total_files": total_files,
+            "error_count": error_count,
+            "runtime_ms": runtime_ms,
+            "max_results": args.max_results,
+            "results_limited": results_limited,
             "pattern": args.pattern,
             "path": args.path,
             "search_type": search_type_str,
@@ -326,26 +365,26 @@ impl Tool for StartSearchTool {
         Ok(vec![
             PromptMessage {
                 role: PromptMessageRole::User,
-                content: PromptMessageContent::text("How do I use streaming search?"),
+                content: PromptMessageContent::text("How do I use fs_search?"),
             },
             PromptMessage {
                 role: PromptMessageRole::Assistant,
                 content: PromptMessageContent::text(
-                    "The start_search tool starts a background search that returns results progressively:\n\n\
+                    "The fs_search tool performs a blocking search that returns all results immediately:\n\n\
                      1. File search:\n\
-                        start_search({\n\
+                        fs_search({\n\
                           \"path\": \"/path/to/search\",\n\
                           \"pattern\": \"package.json\",\n\
-                          \"search_type\": \"files\"\n\
+                          \"search_in\": \"filenames\"\n\
                         })\n\n\
                      2. Content search:\n\
-                        start_search({\n\
+                        fs_search({\n\
                           \"path\": \".\",\n\
                           \"pattern\": \"TODO\",\n\
-                          \"search_type\": \"content\",\n\
+                          \"search_in\": \"content\",\n\
                           \"file_pattern\": \"*.rs\"\n\
                         })\n\n\
-                     Returns search_id immediately. Use get_search_results to fetch results.",
+                     Returns complete results in a single response. Perfect for most search tasks.",
                 ),
             },
         ])

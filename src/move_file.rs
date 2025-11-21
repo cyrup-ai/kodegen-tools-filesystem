@@ -1,7 +1,6 @@
 use crate::validate_path;
 use kodegen_mcp_schema::filesystem::{FsMoveFileArgs, FsMoveFilePromptArgs};
-use kodegen_mcp_tool::Tool;
-use kodegen_mcp_tool::error::McpError;
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use serde_json::json;
 use tokio::fs;
@@ -43,7 +42,7 @@ impl Tool for MoveFileTool {
         false // Moving twice would fail (source no longer exists)
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         let source_path = validate_path(&args.source, &self.config_manager).await?;
         let dest_path = validate_path(&args.destination, &self.config_manager).await?;
 

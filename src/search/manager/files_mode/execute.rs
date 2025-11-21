@@ -59,7 +59,7 @@ pub fn execute(options: &SearchSessionOptions, root: &Path, ctx: &mut SearchCont
         Ok(h) => Arc::new(h),
         Err(e) => {
             log::error!("Failed to build HiArgs: {e}");
-            ctx.is_complete.store(true, Ordering::Release);
+            ctx.is_complete = true;
             return;
         }
     };
@@ -88,5 +88,5 @@ pub fn execute(options: &SearchSessionOptions, root: &Path, ctx: &mut SearchCont
     }
 
     // Mark complete
-    ctx.is_complete.store(true, Ordering::Release);
+    ctx.is_complete = true;
 }

@@ -52,7 +52,6 @@ pub async fn start_server(
 ) -> anyhow::Result<kodegen_server_http::ServerHandle> {
     use kodegen_server_http::{create_http_server, Managers, RouterSet, register_tool};
     use rmcp::handler::server::router::{prompt::PromptRouter, tool::ToolRouter};
-    use std::sync::Arc;
     use std::time::Duration;
 
     let tls_config = match (tls_cert, tls_key) {
@@ -70,8 +69,6 @@ pub async fn start_server(
             let prompt_router = PromptRouter::new();
             let managers = Managers::new();
 
-            // Create search manager
-            let search_manager = Arc::new(crate::search::SearchManager::new(config.clone()));
             let file_read_line_limit = config.get_file_read_line_limit();
 
             // Register all 14 filesystem tools
@@ -139,29 +136,8 @@ pub async fn start_server(
             let (tool_router, prompt_router) = register_tool(
                 tool_router,
                 prompt_router,
-                crate::search::StartSearchTool::new(search_manager.clone()),
+                crate::search::FsSearchTool::new(),
             );
-
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::search::GetMoreSearchResultsTool::new(search_manager.clone()),
-            );
-
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::search::StopSearchTool::new(search_manager.clone()),
-            );
-
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::search::ListSearchesTool::new(search_manager.clone()),
-            );
-
-            // Start cleanup task
-            search_manager.start_cleanup_task();
 
             Ok(RouterSet::new(tool_router, prompt_router, managers))
         })

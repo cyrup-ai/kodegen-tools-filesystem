@@ -1,7 +1,6 @@
 use crate::validate_path;
 use kodegen_mcp_schema::filesystem::{FsDeleteFileArgs, FsDeleteFilePromptArgs};
-use kodegen_mcp_tool::Tool;
-use kodegen_mcp_tool::error::McpError;
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use serde_json::json;
 use tokio::fs;
@@ -43,7 +42,7 @@ impl Tool for DeleteFileTool {
         false // Deleting twice will fail (file no longer exists)
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
 
         // Check file type (errors propagate naturally)

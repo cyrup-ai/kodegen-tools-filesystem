@@ -5,7 +5,6 @@
 use anyhow::Result;
 use kodegen_server_http::{run_http_server, Managers, RouterSet, register_tool};
 use rmcp::handler::server::router::{prompt::PromptRouter, tool::ToolRouter};
-use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -15,11 +14,6 @@ async fn main() -> Result<()> {
         let tool_router = ToolRouter::new();
         let prompt_router = PromptRouter::new();
         let managers = Managers::new();
-
-        // Create search manager for search tools
-        let search_manager = Arc::new(kodegen_tools_filesystem::search::SearchManager::new(
-            config.clone(),
-        ));
 
         // Get configuration values
         let file_read_line_limit = config.get_file_read_line_limit();
@@ -91,33 +85,12 @@ async fn main() -> Result<()> {
             kodegen_tools_filesystem::EditBlockTool::new(config.clone()),
         );
 
-        // Search tools using SearchManager
+        // Search tools
         let (tool_router, prompt_router) = register_tool(
             tool_router,
             prompt_router,
-            kodegen_tools_filesystem::search::StartSearchTool::new(search_manager.clone()),
+            kodegen_tools_filesystem::search::FsSearchTool::new(),
         );
-
-        let (tool_router, prompt_router) = register_tool(
-            tool_router,
-            prompt_router,
-            kodegen_tools_filesystem::search::GetMoreSearchResultsTool::new(search_manager.clone()),
-        );
-
-        let (tool_router, prompt_router) = register_tool(
-            tool_router,
-            prompt_router,
-            kodegen_tools_filesystem::search::StopSearchTool::new(search_manager.clone()),
-        );
-
-        let (tool_router, prompt_router) = register_tool(
-            tool_router,
-            prompt_router,
-            kodegen_tools_filesystem::search::ListSearchesTool::new(search_manager.clone()),
-        );
-
-        // CRITICAL: Start cleanup task after all tools are registered
-        search_manager.start_cleanup_task();
 
         Ok(RouterSet::new(tool_router, prompt_router, managers))
         })

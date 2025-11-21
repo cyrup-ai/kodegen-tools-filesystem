@@ -7,9 +7,8 @@ mod visit_impl;
 
 use crate::search::types::{CaseMode, SearchError, SearchResult};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
-use std::time::Instant;
-use tokio::sync::{RwLock, watch};
+use std::sync::atomic::{AtomicBool, AtomicUsize};
+use tokio::sync::RwLock;
 
 /// Parallel visitor for file search
 pub(super) struct FileSearchVisitor {
@@ -24,21 +23,10 @@ pub(super) struct FileSearchVisitor {
     pub(super) early_term_triggered: Arc<AtomicBool>,
     pub(super) results: Arc<RwLock<Vec<SearchResult>>>,
     pub(super) total_matches: Arc<AtomicUsize>,
-    pub(super) last_read_time_atomic: Arc<AtomicU64>,
-    pub(super) cancellation_rx: watch::Receiver<bool>,
-    pub(super) first_result_tx: watch::Sender<bool>,
-    pub(super) was_incomplete: Arc<RwLock<bool>>,
     pub(super) error_count: Arc<AtomicUsize>,
     pub(super) errors: Arc<RwLock<Vec<SearchError>>>,
     /// Thread-local buffer for batching results
     pub(super) buffer: Vec<SearchResult>,
-    /// Last time we updated the shared `last_read_time`
-    /// Used in `maybe_update_last_read_time()` to throttle lock acquisitions
-    pub(super) last_update_time: Instant,
-    pub(super) start_time: Instant,
-    /// Number of matches since last update
-    /// Used in `maybe_update_last_read_time()` to throttle lock acquisitions
-    pub(super) matches_since_update: usize,
 }
 
 impl FileSearchVisitor {
@@ -61,45 +49,12 @@ impl FileSearchVisitor {
 
     /// Flush buffered results to shared storage
     pub(super) fn flush_buffer(&mut self) {
-        buffering::flush_buffer(
-            &mut self.buffer,
-            &self.results,
-            &self.first_result_tx,
-            &self.last_read_time_atomic,
-            &self.start_time,
-        );
+        buffering::flush_buffer(&mut self.buffer, &self.results);
     }
 
     /// Add result to buffer, flush if full
     pub(super) fn add_result(&mut self, result: SearchResult) {
-        buffering::add_result(
-            &mut self.buffer,
-            result,
-            &self.results,
-            &self.first_result_tx,
-            &self.last_read_time_atomic,
-            &self.start_time,
-        );
-    }
-
-    /// Update `last_read_time` if throttle threshold exceeded
-    pub(super) fn maybe_update_last_read_time(&mut self) {
-        buffering::maybe_update_last_read_time(
-            &mut self.matches_since_update,
-            &mut self.last_update_time,
-            &self.last_read_time_atomic,
-            &self.start_time,
-        );
-    }
-
-    /// Force update `last_read_time` (used in Drop)
-    pub(super) fn force_update_last_read_time(&mut self) {
-        buffering::force_update_last_read_time(
-            &mut self.last_update_time,
-            &mut self.matches_since_update,
-            &self.last_read_time_atomic,
-            &self.start_time,
-        );
+        buffering::add_result(&mut self.buffer, result, &self.results);
     }
 }
 
@@ -108,7 +63,5 @@ impl Drop for FileSearchVisitor {
         // Flush any remaining buffered results
         // This is CRITICAL - prevents losing the last batch of results
         self.flush_buffer();
-        // Ensure final last_read_time update
-        self.force_update_last_read_time();
     }
 }

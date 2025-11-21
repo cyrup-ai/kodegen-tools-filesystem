@@ -1,8 +1,7 @@
 use crate::ReadFileTool;
 use futures::future;
 use kodegen_mcp_schema::filesystem::{FsReadMultipleFilesArgs, FsReadMultipleFilesPromptArgs};
-use kodegen_mcp_tool::Tool;
-use kodegen_mcp_tool::error::McpError;
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -60,6 +59,7 @@ impl ReadMultipleFilesTool {
         path: String,
         offset: i64,
         length: Option<usize>,
+        ctx: &ToolExecutionContext,
     ) -> MultiFileResult {
         use kodegen_mcp_schema::filesystem::FsReadFileArgs;
 
@@ -70,7 +70,7 @@ impl ReadMultipleFilesTool {
             is_url: false,
         };
 
-        match self.read_file_tool.execute(args).await {
+        match self.read_file_tool.execute(args, ctx.clone()).await {
             Ok(contents) => {
                 // Parse the JSON metadata (second Content item)
                 if contents.len() >= 2
@@ -155,7 +155,7 @@ impl Tool for ReadMultipleFilesTool {
         false // Only reads local files, not URLs
     }
 
-    async fn execute(&self, args: Self::Args) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         if args.paths.is_empty() {
             return Err(McpError::InvalidArguments(
                 "No paths provided. Please provide at least one file path.".to_string(),
@@ -166,7 +166,7 @@ impl Tool for ReadMultipleFilesTool {
         let read_futures = args
             .paths
             .into_iter()
-            .map(|path| self.read_one_file(path, args.offset, args.length));
+            .map(|path| self.read_one_file(path, args.offset, args.length, &_ctx));
 
         // Execute all reads in parallel
         let results = future::join_all(read_futures).await;
