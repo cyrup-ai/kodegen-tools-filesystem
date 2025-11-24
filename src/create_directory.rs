@@ -79,10 +79,95 @@ impl Tool for CreateDirectoryTool {
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {
-        vec![]
+        vec![PromptArgument {
+            name: "scenario".to_string(),
+            title: None,
+            description: Some(
+                "Use case for customized examples: 'basic' (single directory), 'nested' (hierarchy), \
+                 'idempotence' (repeated calls), or 'validation' (path behavior)"
+                    .to_string(),
+            ),
+            required: Some(false),
+        }]
     }
 
-    async fn prompt(&self, _args: Self::PromptArgs) -> Result<Vec<PromptMessage>, McpError> {
+    async fn prompt(&self, args: Self::PromptArgs) -> Result<Vec<PromptMessage>, McpError> {
+        let scenario = args.scenario.as_deref();
+
+        let content = match scenario {
+            Some("basic") => {
+                "The create_directory tool creates a single directory.\n\n\
+                 Basic usage:\n\
+                 create_directory({\"path\": \"/path/to/newdir\"})\n\n\
+                 This creates the directory 'newdir' at the specified path. If the parent directories \
+                 already exist, only the final directory is created. The tool is idempotent - calling \
+                 it multiple times with the same path is safe and will succeed even if the directory \
+                 already exists.\n\n\
+                 Common use case: Create a directory before writing files into it."
+            }
+            Some("nested") => {
+                "The create_directory tool excels at creating deep directory hierarchies in one operation.\n\n\
+                 Nested directory example:\n\
+                 create_directory({\"path\": \"/projects/myapp/src/components/ui/buttons\"})\n\n\
+                 This single call creates ALL parent directories automatically:\n\
+                 - /projects\n\
+                 - /projects/myapp\n\
+                 - /projects/myapp/src\n\
+                 - /projects/myapp/src/components\n\
+                 - /projects/myapp/src/components/ui\n\
+                 - /projects/myapp/src/components/ui/buttons\n\n\
+                 You don't need to create each level separately. The tool uses create_dir_all internally, \
+                 which handles the entire hierarchy. This is the recommended approach for setting up \
+                 project structures or organizing files in nested categories."
+            }
+            Some("idempotence") => {
+                "The create_directory tool is idempotent - you can safely call it multiple times.\n\n\
+                 Example - calling twice with same path:\n\
+                 create_directory({\"path\": \"/tmp/cache\"})\n\
+                 create_directory({\"path\": \"/tmp/cache\"})  // Also succeeds!\n\n\
+                 Both calls succeed. The second call detects the directory already exists and returns \
+                 successfully without error. This makes the tool safe to use in:\n\
+                 - Initialization scripts that may run multiple times\n\
+                 - Retry logic where operations might be repeated\n\
+                 - Concurrent workflows where multiple processes might create the same directory\n\n\
+                 The tool's behavior is marked as idempotent=true, destructive=false, making it safe \
+                 for repeated invocation without side effects."
+            }
+            Some("validation") => {
+                "The create_directory tool validates and normalizes all paths before creation.\n\n\
+                 Path normalization examples:\n\
+                 create_directory({\"path\": \"~/projects/myapp\"})\n\
+                 // Expands ~ to your home directory: /home/user/projects/myapp\n\n\
+                 create_directory({\"path\": \"/tmp/./cache/../data\"})\n\
+                 // Normalizes to: /tmp/data\n\n\
+                 Security validation:\n\
+                 The tool checks that paths are within allowed directories (configured in your system). \
+                 Attempts to create directories outside allowed locations will be rejected with an error. \
+                 This prevents accidental or malicious directory creation in sensitive system areas.\n\n\
+                 The validation happens before any filesystem operations, ensuring safe and predictable \
+                 behavior."
+            }
+            _ => {
+                // Default: comprehensive overview
+                "The create_directory tool creates directories recursively with automatic validation.\n\n\
+                 Basic usage:\n\
+                 create_directory({\"path\": \"/path/to/newdir\"})\n\n\
+                 Nested directories:\n\
+                 create_directory({\"path\": \"/path/to/nested/deep/dir\"})\n\n\
+                 Key features:\n\
+                 • Recursive creation: Automatically creates all parent directories if they don't exist\n\
+                 • Idempotent: Safe to call multiple times with the same path - succeeds even if directory exists\n\
+                 • Path validation: Validates paths are within allowed directories before creation\n\
+                 • Path normalization: Expands ~ for home directories and normalizes path separators\n\
+                 • Non-destructive: Creates only, never deletes (destructive=false)\n\n\
+                 Common patterns:\n\
+                 1. Before file operations: Always ensure target directory exists\n\
+                 2. Project setup: Create entire directory structures in one call\n\
+                 3. Initialization: Safe to call in scripts that may run multiple times\n\n\
+                 The tool uses tokio::fs::create_dir_all internally for non-blocking async I/O."
+            }
+        };
+
         Ok(vec![
             PromptMessage {
                 role: PromptMessageRole::User,
@@ -90,17 +175,7 @@ impl Tool for CreateDirectoryTool {
             },
             PromptMessage {
                 role: PromptMessageRole::Assistant,
-                content: PromptMessageContent::text(
-                    "The create_directory tool creates directories recursively:\n\n\
-                     1. Single directory: create_directory({\"path\": \"/path/to/newdir\"})\n\
-                     2. Nested directories: create_directory({\"path\": \"/path/to/nested/deep/dir\"})\n\n\
-                     The tool automatically:\n\
-                     - Creates all parent directories if they don't exist\n\
-                     - Succeeds silently if directory already exists (idempotent)\n\
-                     - Validates paths are within allowed directories\n\
-                     - Normalizes paths and expands ~\n\n\
-                     This is safe to call multiple times with the same path.",
-                ),
+                content: PromptMessageContent::text(content),
             },
         ])
     }

@@ -205,7 +205,15 @@ impl Tool for ReadMultipleFilesTool {
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {
-        vec![]
+        vec![PromptArgument {
+            name: "file_type".to_string(),
+            title: None,
+            description: Some(
+                "Optional file type to focus examples on (e.g., 'json', 'log', 'rust')"
+                    .to_string(),
+            ),
+            required: Some(false),
+        }]
     }
 
     async fn prompt(&self, _args: Self::PromptArgs) -> Result<Vec<PromptMessage>, McpError> {

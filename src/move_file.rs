@@ -74,7 +74,17 @@ impl Tool for MoveFileTool {
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {
-        vec![]
+        vec![PromptArgument {
+            name: "operation_focus".to_string(),
+            title: None,
+            description: Some(
+                "Optional focus area for teaching prompt. Choose: 'rename' (file/directory renaming), \
+                 'move_directory' (moving entire directory trees), 'atomic_behavior' (atomic operation guarantees), \
+                 'edge_cases' (handling symlinks/special cases), or 'best_practices' (safe movement patterns)"
+                    .to_string(),
+            ),
+            required: Some(false),
+        }]
     }
 
     async fn prompt(&self, _args: Self::PromptArgs) -> Result<Vec<PromptMessage>, McpError> {

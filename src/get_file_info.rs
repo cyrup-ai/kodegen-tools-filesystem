@@ -182,36 +182,161 @@ impl Tool for GetFileInfoTool {
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {
-        vec![]
+        vec![PromptArgument {
+            name: "focus_area".to_string(),
+            title: None,
+            description: Some(
+                "Optional focus area for examples: 'permissions' (Unix vs Windows), 'timestamps' (temporal metadata), \
+                 'sizes' (byte calculations), 'line_counts' (text file analysis), 'platform_differences' (cross-platform behavior), \
+                 or 'all' (comprehensive overview)".to_string(),
+            ),
+            required: Some(false),
+        }]
     }
 
     async fn prompt(&self, _args: Self::PromptArgs) -> Result<Vec<PromptMessage>, McpError> {
         Ok(vec![
             PromptMessage {
                 role: PromptMessageRole::User,
-                content: PromptMessageContent::text("How do I get file metadata?"),
+                content: PromptMessageContent::text("What does the fs_get_file_info tool do and when should I use it?"),
             },
             PromptMessage {
                 role: PromptMessageRole::Assistant,
                 content: PromptMessageContent::text(
-                    "The get_file_info tool provides comprehensive file/directory metadata:\n\n\
-                     Usage: get_file_info({\"path\": \"/path/to/file.txt\"})\n\n\
-                     Returns:\n\
-                     - size: File size in bytes\n\
-                     - created: Creation timestamp\n\
-                     - modified_secs_ago: Seconds since last modification\n\
-                     - accessed: Last access time\n\
-                     - is_directory: Whether path is a directory\n\
-                     - is_file: Whether path is a file\n\
-                     - permissions: Unix permissions in octal (Unix only)\n\
-                     - readonly: Read-only flag (Windows only)\n\
-                     - line_count: Number of lines (text files < 10MB only)\n\
-                     - last_line: Zero-indexed last line number\n\
-                     - append_position: Line number for appending\n\n\
-                     The tool automatically:\n\
-                     - Validates and normalizes paths\n\
-                     - Handles platform-specific permission formats\n\
-                     - Efficiently calculates line counts for small text files",
+                    "The fs_get_file_info tool retrieves comprehensive metadata about any file or directory without loading \
+                     its contents. Use it to:\n\
+                     - Determine if a path is a file or directory\n\
+                     - Get file size in bytes for budget/performance decisions\n\
+                     - Understand modification times for cache invalidation or sync workflows\n\
+                     - Extract line count for text files (essential for chunking strategies)\n\
+                     - Inspect permissions before read/write operations\n\n\
+                     Basic usage: fs_get_file_info({\"path\": \"/path/to/file.txt\"})\n\n\
+                     Returns two outputs:\n\
+                     1. Human-readable summary with formatted size and relative times\n\
+                     2. Structured JSON with all metadata fields",
+                ),
+            },
+            PromptMessage {
+                role: PromptMessageRole::User,
+                content: PromptMessageContent::text("Walk me through the JSON response fields and what each means."),
+            },
+            PromptMessage {
+                role: PromptMessageRole::Assistant,
+                content: PromptMessageContent::text(
+                    "Core metadata fields returned:\n\n\
+                     IDENTIFICATION:\n\
+                     - path: Normalized absolute path after validation\n\
+                     - is_file: Boolean - true if it's a regular file\n\
+                     - is_directory: Boolean - true if it's a directory\n\n\
+                     SIZE INFORMATION:\n\
+                     - size: Raw byte count (use to decide if file fits in memory)\n\n\
+                     TIMESTAMPS (all in system time format):\n\
+                     - created: Creation time (when file/dir was created)\n\
+                     - accessed: Last read time (updates may be disabled on some filesystems)\n\
+                     - modified_secs_ago: Seconds since last write (useful for relative time checks)\n\n\
+                     TEXT FILE ANALYSIS (text files < 10MB only):\n\
+                     - line_count: Total number of lines in file\n\
+                     - last_line: Zero-indexed number of final line (useful for range operations)\n\
+                     - append_position: Line number to append at (equals line_count)\n\n\
+                     PERMISSIONS (platform-specific):\n\
+                     - Unix: 'permissions' field contains 3-digit octal (e.g., \"644\" for rw-r--r--)\n\
+                     - Windows: 'readonly' boolean flag (true means read-only)",
+                ),
+            },
+            PromptMessage {
+                role: PromptMessageRole::User,
+                content: PromptMessageContent::text("How do permissions differ between Unix and Windows?"),
+            },
+            PromptMessage {
+                role: PromptMessageRole::Assistant,
+                content: PromptMessageContent::text(
+                    "UNIX PERMISSIONS (octal notation):\n\
+                     The 'permissions' field shows 3 digits: owner, group, others\n\
+                     Each digit: 4=read, 2=write, 1=execute (sum them)\n\
+                     Examples:\n\
+                     - 755 = rwxr-xr-x (executable, others can read/execute)\n\
+                     - 644 = rw-r--r-- (readable by all, writable by owner only)\n\
+                     - 700 = rwx------ (owner only, no group/other access)\n\n\
+                     WINDOWS PERMISSIONS:\n\
+                     The tool returns a simple 'readonly' boolean:\n\
+                     - true = file/directory is read-only (use fs_edit_block not fs_write_file)\n\
+                     - false = file/directory is writable\n\n\
+                     CROSS-PLATFORM TIP:\n\
+                     If targeting both platforms, check 'readonly' on Windows and the last digit \
+                     of Unix 'permissions' to determine write access. On Unix, also consider if \
+                     you're the owner (critical for write decisions).",
+                ),
+            },
+            PromptMessage {
+                role: PromptMessageRole::User,
+                content: PromptMessageContent::text("What are the limitations and edge cases I should know?"),
+            },
+            PromptMessage {
+                role: PromptMessageRole::Assistant,
+                content: PromptMessageContent::text(
+                    "IMPORTANT LIMITATIONS:\n\n\
+                     1. LINE COUNTING:\n\
+                     - Only available for files < 10MB (uses streaming for memory efficiency)\n\
+                     - For larger files, you must estimate or use fs_read_file with offset/length\n\
+                     - Binary files may return no line count (encoding errors are silently skipped)\n\n\
+                     2. TIMESTAMPS:\n\
+                     - 'created' may not be reliable on all filesystems (shows as ??? if unavailable)\n\
+                     - 'accessed' may not update depending on filesystem mount options (noatime)\n\
+                     - Modified time is most reliable across platforms\n\n\
+                     3. SYMLINKS:\n\
+                     - The tool follows symlinks and returns metadata for target file\n\
+                     - To detect if something is a symlink, use fs_read_file or fs_list_directory\n\n\
+                     4. PATH VALIDATION:\n\
+                     - Paths must be within allowed directories (config-based restrictions)\n\
+                     - Tilde (~) is expanded to home directory\n\
+                     - Relative paths are resolved relative to cwd\n\n\
+                     COMMON MISTAKES:\n\
+                     - Assuming created/accessed times are always present (they can be empty)\n\
+                     - Relying on line count for very large files (get file size first, check < 10MB)\n\
+                     - Forgetting that Unix permissions require owner check for write decisions",
+                ),
+            },
+            PromptMessage {
+                role: PromptMessageRole::User,
+                content: PromptMessageContent::text("Show me practical usage patterns and examples."),
+            },
+            PromptMessage {
+                role: PromptMessageRole::Assistant,
+                content: PromptMessageContent::text(
+                    "PRACTICAL PATTERNS:\n\n\
+                     PATTERN 1: Safe file reading strategy\n\
+                     ```\n\
+                     1. Call fs_get_file_info({\"path\": \"file.txt\"})\n\
+                     2. If size > 10MB: Use fs_read_file with offset/length\n\
+                     3. If size <= 10MB and line_count exists: Safe to read fully\n\
+                     4. If line_count missing: Binary file - use base64 from fs_read_file\n\
+                     ```\n\n\
+                     PATTERN 2: Check if you can write\n\
+                     ```\n\
+                     1. Call fs_get_file_info({\"path\": \"file.txt\"})\n\
+                     2. Unix: Parse 'permissions' last digit (1=executable, 2=write, 4=read)\n\
+                     3. Windows: Check 'readonly' field\n\
+                     4. If no write permission, use different path or fail gracefully\n\
+                     ```\n\n\
+                     PATTERN 3: Chunking strategy\n\
+                     ```\n\
+                     1. Get file with fs_get_file_info\n\
+                     2. Divide by 100: chunk_size = line_count / 100\n\
+                     3. Use fs_read_file with offset 0, length chunk_size\n\
+                     4. Increment offset, repeat for remaining chunks\n\
+                     ```\n\n\
+                     PATTERN 4: Directory inspection\n\
+                     ```\n\
+                     1. Call fs_get_file_info({\"path\": \".\"})\n\
+                     2. If is_directory is false, path is a file (not a folder)\n\
+                     3. For dir contents, use fs_list_directory (not fs_get_file_info)\n\
+                     ```\n\n\
+                     PATTERN 5: Modified time checks\n\
+                     ```\n\
+                     1. Get metadata: fs_get_file_info({\"path\": \"cache.json\"})\n\
+                     2. If modified_secs_ago > 3600: Cache is stale (>1 hour old)\n\
+                     3. Regenerate cache or refresh from source\n\
+                     ```",
                 ),
             },
         ])

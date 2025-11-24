@@ -79,27 +79,50 @@ impl Tool for DeleteFileTool {
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {
-        vec![]
+        vec![PromptArgument {
+            name: "context".to_string(),
+            title: None,
+            description: Some(
+                "Optional context for examples (e.g., 'ci_cleanup', 'workflow', 'safety_patterns')"
+                    .to_string(),
+            ),
+            required: Some(false),
+        }]
     }
 
     async fn prompt(&self, _args: Self::PromptArgs) -> Result<Vec<PromptMessage>, McpError> {
         Ok(vec![
             PromptMessage {
                 role: PromptMessageRole::User,
-                content: PromptMessageContent::text("How do I safely delete files?"),
+                content: PromptMessageContent::text(
+                    "How do I use delete_file safely and when should I use it?",
+                ),
             },
             PromptMessage {
                 role: PromptMessageRole::Assistant,
                 content: PromptMessageContent::text(
-                    "The delete_file tool permanently deletes files:\n\n\
-                     Usage: delete_file({\"path\": \"/path/to/file.txt\"})\n\n\
-                     Safety features:\n\
-                     - Only deletes files, not directories (prevents accidental recursive deletion)\n\
-                     - Validates path exists before attempting deletion\n\
+                    "The delete_file tool permanently removes individual files:\n\n\
+                     Basic usage: delete_file({\"path\": \"/path/to/file.txt\"})\n\n\
+                     Key safety features:\n\
+                     - Only deletes files (not directories - use delete_directory for that)\n\
+                     - Validates path exists and is a regular file before deletion\n\
                      - Validates path is within allowed directories\n\
-                     - Returns clear error if file doesn't exist\n\n\
-                     IMPORTANT: This operation is permanent and cannot be undone!\n\n\
-                     To delete directories, use delete_directory instead.",
+                     - Returns clear errors if file doesn't exist or is a directory\n\
+                     - Marked as destructive and non-idempotent (deleting twice fails)\n\n\
+                     Common use cases:\n\
+                     1. CI/CD cleanup: delete temporary build artifacts\n\
+                     2. Workflow automation: remove processed files\n\
+                     3. Cache management: delete stale or expired files\n\
+                     4. File rotation: delete old log or backup files\n\
+                     5. Build output: remove intermediate compilation outputs\n\n\
+                     Important patterns:\n\
+                     - Always verify the path is correct before deletion\n\
+                     - Use fs_search or fs_list_directory to verify file exists first\n\
+                     - For batch deletions, iterate with delete_file (don't use delete_directory)\n\
+                     - To delete directories and contents, use delete_directory with recursive=true\n\
+                     - Handle non-existent files gracefully in automation\n\n\
+                     CRITICAL: This operation is permanent and cannot be undone!\n\
+                     Once deleted, file recovery requires filesystem utilities outside this tool.",
                 ),
             },
         ])

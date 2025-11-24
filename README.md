@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="assets/img/banner.png" alt="Kodegen AI Banner" width="100%" />
+</div>
+
 # kodegen-tools-filesystem
 
 Memory-efficient, blazing-fast MCP (Model Context Protocol) filesystem tools for AI code generation agents.
