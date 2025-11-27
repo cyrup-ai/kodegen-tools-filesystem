@@ -1,7 +1,6 @@
 mod common;
 
 use anyhow::Context;
-use kodegen_mcp_client::responses::StartSearchResponse;
 use kodegen_mcp_schema::filesystem::*;
 use serde_json::json;
 use tracing::info;
@@ -101,7 +100,7 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
             .call_tool(
                 FS_EDIT_BLOCK,
                 json!({
-                    "file_path": test_file.to_string_lossy(),
+                    "path": test_file.to_string_lossy(),
                     "old_string": "test file",
                     "new_string": "modified file"
                 }),
@@ -166,55 +165,8 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
             .context("Failed to read multiple files")?;
         info!("✅ Read multiple files successfully");
 
-        // 9. START_SEARCH - Start file content search
-        info!("9. Testing start_search");
-        let response: StartSearchResponse = client
-            .call_tool_typed(
-                FS_START_SEARCH,
-                json!({
-                    "path": test_dir.to_string_lossy(),
-                    "pattern": "test",
-                    "search_type": "content",
-                    "timeout_ms": 5000,
-                    "no_ignore": true  // Essential: temp directories are often gitignored
-                }),
-            )
-            .await?;
-
-        let session_id = response.session_id;
-        info!("Started search with session ID: {}", session_id);
-
-        // 10. get_search_results - Get search results
-        {
-            info!("10. Testing get_search_results");
-            client
-                .call_tool(
-                    FS_GET_SEARCH_RESULTS,
-                    json!({ "session_id": session_id, "offset": 0, "length": 10 }),
-                )
-                .await
-                .context("Failed to get search results")?;
-            info!("✅ Got search results successfully");
-
-            // 11. LIST_SEARCHES - List active searches
-            info!("11. Testing list_searches");
-            client
-                .call_tool(FS_LIST_SEARCHES, json!({}))
-                .await
-                .context("Failed to list searches")?;
-            info!("✅ Listed searches successfully");
-
-            // 12. STOP_SEARCH - Stop the search
-            info!("12. Testing stop_search");
-            client
-                .call_tool(FS_STOP_SEARCH, json!({ "session_id": session_id }))
-                .await
-                .context("Failed to stop search")?;
-            info!("✅ Stopped search successfully");
-        }
-
-        // 13. DELETE_FILE - Delete test files
-        info!("13. Testing delete_file");
+        // 9. DELETE_FILE - Delete test files
+        info!("9. Testing delete_file");
         for file in [&test_file_renamed, &test_file2] {
             client
                 .call_tool(
@@ -226,8 +178,8 @@ async fn run_filesystem_example(client: &common::LoggingClient) -> anyhow::Resul
             info!("✅ Deleted file: {}", file.display());
         }
 
-        // 14. DELETE_DIRECTORY - Clean up test directory (as part of test)
-        info!("14. Testing delete_directory");
+        // 10. DELETE_DIRECTORY - Clean up test directory (as part of test)
+        info!("10. Testing delete_directory");
         client
             .call_tool(
                 FS_DELETE_DIRECTORY,

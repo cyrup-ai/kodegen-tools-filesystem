@@ -18,7 +18,7 @@ async fn main() -> Result<()> {
         // Get configuration values
         let file_read_line_limit = config.get_file_read_line_limit();
 
-        // Register all 14 filesystem tools
+        // Register all 11 filesystem tools
         let (tool_router, prompt_router) = register_tool(
             tool_router,
             prompt_router,

@@ -11,7 +11,7 @@ Memory-efficient, blazing-fast MCP (Model Context Protocol) filesystem tools for
 
 ## Overview
 
-`kodegen-tools-filesystem` provides a comprehensive suite of 14 filesystem and search tools exposed via the Model Context Protocol (MCP). Built on top of ripgrep's powerful search capabilities, it offers high-performance file operations, directory management, and advanced code search functionality for AI agents.
+`kodegen-tools-filesystem` provides a comprehensive suite of 11 filesystem and search tools exposed via the Model Context Protocol (MCP). Built on top of ripgrep's powerful search capabilities, it offers high-performance file operations, directory management, and advanced code search functionality for AI agents.
 
 ## Features
 
@@ -30,8 +30,7 @@ Memory-efficient, blazing-fast MCP (Model Context Protocol) filesystem tools for
 ### Advanced Search (Powered by ripgrep)
 - **File Search**: Find files by name pattern with glob support
 - **Content Search**: Full-text search inside files with regex/PCRE2
-- **Streaming Results**: Asynchronous search with pagination
-- **Session Management**: Concurrent searches with cancellation support
+- **Blocking Search**: Fast, synchronous search with comprehensive results
 
 ### Search Features
 - Dual regex engines (Rust regex + PCRE2 fallback)
@@ -91,7 +90,7 @@ The server respects the following environment variables:
 
 ### Available Tools
 
-The server exposes 14 MCP tools:
+The server exposes 11 MCP tools:
 
 | Category | Tool | Description |
 |----------|------|-------------|
@@ -105,17 +104,14 @@ The server exposes 14 MCP tools:
 | Directory | `fs_create_directory` | Create directories recursively |
 | | `fs_list_directory` | List directory contents with depth |
 | | `fs_delete_directory` | Delete directories recursively |
-| Search | `fs_start_search` | Start file or content search |
-| | `fs_get_search_results` | Paginate search results |
-| | `fs_stop_search` | Cancel active search |
-| | `fs_list_searches` | List active search sessions |
+| Search | `fs_search` | Fast blocking search (files or content) |
 
 ## Examples
 
 ### Running Examples
 
 ```bash
-# Comprehensive demo of all 14 tools
+# Comprehensive demo of all 11 tools
 cargo run --example filesystem_demo
 
 # Search examples
@@ -132,27 +128,15 @@ cargo run --example direct_search_advanced
 use kodegen_mcp_client::tools;
 use serde_json::json;
 
-// Start a content search
-let response = client.call_tool(
-    tools::START_SEARCH,
+// Perform a blocking search
+let results = client.call_tool(
+    tools::FS_SEARCH,
     json!({
         "path": "/path/to/search",
         "pattern": "TODO",
-        "search_type": "content",
+        "search_in": "content",
         "case_mode": "insensitive",
         "max_results": 100
-    })
-).await?;
-
-let session_id = response.session_id;
-
-// Get results
-let results = client.call_tool(
-    tools::get_search_results,
-    json!({
-        "session_id": session_id,
-        "offset": 0,
-        "length": 50
     })
 ).await?;
 ```
@@ -197,18 +181,17 @@ cargo clippy --fix
 ### Core Components
 
 - **Tool Modules**: Each tool (`read_file`, `write_file`, etc.) is a self-contained module
-- **Search Manager**: Stateful coordinator for concurrent search sessions
 - **Ripgrep Integration**: Full ripgrep implementation with dual regex engines
 - **Path Validation**: Security layer for filesystem access control
 - **HTTP Server**: MCP protocol server using `kodegen_server_http`
 
 ### Search Architecture
 
-The search system uses a session-based model:
-1. `start_search` creates a background search task and returns a session ID
-2. `get_search_results` retrieves paginated results
-3. `stop_search` cancels the background task
-4. Sessions auto-expire after inactivity
+The search system uses a blocking model powered by ripgrep:
+1. `fs_search` performs synchronous search with immediate results
+2. Supports both filename and content search with full regex capabilities
+3. Returns all results in a single response (no pagination needed)
+4. Stateless design - no session management required
 
 ## License
 

@@ -66,20 +66,20 @@ impl EditBlockTool {
              ## Basic Usage\n\n\
              1. Single replacement (default expected_replacements: 1):\n\
                 fs_edit_block({\n\
-                  \"file_path\": \"src/config.rs\",\n\
+                  \"path\": \"src/config.rs\",\n\
                   \"old_string\": \"const MAX_RETRIES: u32 = 3;\",\n\
                   \"new_string\": \"const MAX_RETRIES: u32 = 5;\"\n\
                 })\n\n\
              2. Multiple replacements (specify exact count):\n\
                 fs_edit_block({\n\
-                  \"file_path\": \"tests/integration.rs\",\n\
+                  \"path\": \"tests/integration.rs\",\n\
                   \"old_string\": \"assert_eq!(result, true);\",\n\
                   \"new_string\": \"assert!(result);\",\n\
                   \"expected_replacements\": 12\n\
                 })\n\n\
              3. Unknown count (use 0 to accept any number):\n\
                 fs_edit_block({\n\
-                  \"file_path\": \"README.md\",\n\
+                  \"path\": \"README.md\",\n\
                   \"old_string\": \"v1.2.3\",\n\
                   \"new_string\": \"v1.3.0\",\n\
                   \"expected_replacements\": 0\n\
@@ -227,14 +227,14 @@ impl EditBlockTool {
              ## Example Workflow\n\n\
              1. Attempt edit:\n\
                 fs_edit_block({\n\
-                  \"file_path\": \"config.rs\",\n\
+                  \"path\": \"config.rs\",\n\
                   \"old_string\": \"timeout: 5000\",\n\
                   \"new_string\": \"timeout: 10000\"\n\
                 })\n\n\
              2. Get fuzzy match error showing file has \"timeout:  5000\" (extra space)\n\n\
              3. Fix search string and retry:\n\
                 fs_edit_block({\n\
-                  \"file_path\": \"config.rs\",\n\
+                  \"path\": \"config.rs\",\n\
                   \"old_string\": \"timeout:  5000\",\n\
                   \"new_string\": \"timeout: 10000\"\n\
                 })"
@@ -309,7 +309,7 @@ impl EditBlockTool {
              ## Examples\n\n\
              1. Safe single replacement:\n\
                 fs_edit_block({\n\
-                  \"file_path\": \"config.rs\",\n\
+                  \"path\": \"config.rs\",\n\
                   \"old_string\": \"const VERSION: &str = \\\"1.0.0\\\";\",\n\
                   \"new_string\": \"const VERSION: &str = \\\"1.1.0\\\";\",\n\
                   \"expected_replacements\": 1\n\
@@ -317,7 +317,7 @@ impl EditBlockTool {
                 Result: Success if exactly 1 match, warning otherwise\n\n\
              2. Bulk refactoring:\n\
                 fs_edit_block({\n\
-                  \"file_path\": \"tests/mod.rs\",\n\
+                  \"path\": \"tests/mod.rs\",\n\
                   \"old_string\": \"use_legacy_api()\",\n\
                   \"new_string\": \"use_new_api()\",\n\
                   \"expected_replacements\": 15\n\
@@ -325,7 +325,7 @@ impl EditBlockTool {
                 Result: Success if exactly 15 matches, warning if different\n\n\
              3. Unknown count (exploratory):\n\
                 fs_edit_block({\n\
-                  \"file_path\": \"docs/README.md\",\n\
+                  \"path\": \"docs/README.md\",\n\
                   \"old_string\": \"http://old-domain.com\",\n\
                   \"new_string\": \"https://new-domain.com\",\n\
                   \"expected_replacements\": 0\n\
@@ -335,7 +335,7 @@ impl EditBlockTool {
              Problem: You want to replace a common word like \"data\" in a specific context.\n\n\
              Bad approach (risky):\n\
              fs_edit_block({\n\
-               \"file_path\": \"processor.rs\",\n\
+               \"path\": \"processor.rs\",\n\
                \"old_string\": \"data\",\n\
                \"new_string\": \"input_data\",\n\
                \"expected_replacements\": 0\n\
@@ -343,7 +343,7 @@ impl EditBlockTool {
              Risk: Replaces ALL 47 occurrences of \"data\", breaking unrelated code!\n\n\
              Good approach (safe):\n\
              fs_edit_block({\n\
-               \"file_path\": \"processor.rs\",\n\
+               \"path\": \"processor.rs\",\n\
                \"old_string\": \"fn process(data: &[u8])\",\n\
                \"new_string\": \"fn process(input_data: &[u8])\",\n\
                \"expected_replacements\": 1\n\
@@ -502,7 +502,7 @@ impl EditBlockTool {
              Always rejected:\n\
              ```\n\
              fs_edit_block({\n\
-               \"file_path\": \"file.txt\",\n\
+               \"path\": \"file.txt\",\n\
                \"old_string\": \"\",\n\
                \"new_string\": \"something\"\n\
              })\n\
@@ -513,7 +513,7 @@ impl EditBlockTool {
              Always rejected:\n\
              ```\n\
              fs_edit_block({\n\
-               \"file_path\": \"file.txt\",\n\
+               \"path\": \"file.txt\",\n\
                \"old_string\": \"foo\",\n\
                \"new_string\": \"foo\"\n\
              })\n\
@@ -528,7 +528,7 @@ impl EditBlockTool {
              Example (safe):\n\
              ```\n\
              fs_edit_block({\n\
-               \"file_path\": \"messages.txt\",\n\
+               \"path\": \"messages.txt\",\n\
                \"old_string\": \"Status: ✓ Complete\",\n\
                \"new_string\": \"Status: ✗ Failed\"\n\
              })\n\
@@ -564,7 +564,7 @@ impl EditBlockTool {
              Example error:\n\
              ```\n\
              fs_edit_block({\n\
-               \"file_path\": \"../../etc/passwd\",\n\
+               \"path\": \"../../etc/passwd\",\n\
                \"old_string\": \"...\",\n\
                \"new_string\": \"...\"\n\
              })\n\
@@ -574,7 +574,7 @@ impl EditBlockTool {
              Rejected before any search:\n\
              ```\n\
              fs_edit_block({\n\
-               \"file_path\": \"nonexistent.txt\",\n\
+               \"path\": \"nonexistent.txt\",\n\
                \"old_string\": \"...\",\n\
                \"new_string\": \"...\"\n\
              })\n\
@@ -584,7 +584,7 @@ impl EditBlockTool {
              Rejected if file not writable:\n\
              ```\n\
              fs_edit_block({\n\
-               \"file_path\": \"/root/protected.txt\",\n\
+               \"path\": \"/root/protected.txt\",\n\
                \"old_string\": \"...\",\n\
                \"new_string\": \"...\"\n\
              })\n\
@@ -594,7 +594,7 @@ impl EditBlockTool {
              NOT regex, so special chars are LITERAL:\n\
              ```\n\
              fs_edit_block({\n\
-               \"file_path\": \"regex.txt\",\n\
+               \"path\": \"regex.txt\",\n\
                \"old_string\": \"data.*\",\n\
                \"new_string\": \"result.*\"\n\
              })\n\
@@ -701,7 +701,7 @@ impl Tool for EditBlockTool {
             ));
         }
 
-        let valid_path = validate_path(&args.file_path, &self.config_manager).await?;
+        let valid_path = validate_path(&args.path, &self.config_manager).await?;
 
         // Get file extension for response
         let extension = valid_path
@@ -823,7 +823,7 @@ impl Tool for EditBlockTool {
 
                 // Build suggestion context
                 let context = SuggestionContext {
-                    file_path: args.file_path.clone(),
+                    file_path: args.path.clone(),
                     search_string: args.old_string.clone(),
                     line_number: Some(line_number),
                     log_path,
@@ -890,7 +890,7 @@ impl Tool for EditBlockTool {
 
             // No good fuzzy match found - below threshold
             let context = SuggestionContext {
-                file_path: args.file_path.clone(),
+                file_path: args.path.clone(),
                 search_string: args.old_string.clone(),
                 line_number: Some(line_number),
                 log_path,
@@ -961,7 +961,7 @@ impl Tool for EditBlockTool {
                 "\x1b[33m󰆐 {} replacement(s) in {}\x1b[0m\n\
                  󰢬 Precision: {} → {} bytes (delta: {}){}",
                 occurrence_count,
-                args.file_path,
+                args.path,
                 args.old_string.len(),
                 args.new_string.len(),
                 delta_str,
@@ -972,7 +972,7 @@ impl Tool for EditBlockTool {
             // JSON metadata
             let metadata = json!({
                 "success": true,
-                "file_path": args.file_path,
+                "path": args.path,
                 "replacements": occurrence_count,
                 "old_bytes": args.old_string.len(),
                 "new_bytes": args.new_string.len(),
@@ -989,7 +989,7 @@ impl Tool for EditBlockTool {
         } else {
             // Mismatch - success with warning and suggestions
             let context = SuggestionContext {
-                file_path: args.file_path.clone(),
+                file_path: args.path.clone(),
                 search_string: args.old_string.clone(),
                 line_number: None,
                 log_path: None,
@@ -1017,7 +1017,7 @@ impl Tool for EditBlockTool {
             let summary = format!(
                 "\x1b[33m󰆐 {} replacement(s) in {}\x1b[0m\n 󰢬 Precision: {} → {} bytes (delta: {}) · Expected: {} · See Content[1] for details{}",
                 occurrence_count,
-                args.file_path,
+                args.path,
                 args.old_string.len(),
                 args.new_string.len(),
                 delta_str,
@@ -1029,7 +1029,7 @@ impl Tool for EditBlockTool {
             // JSON metadata
             let metadata = json!({
                 "success": true,
-                "file_path": args.file_path,
+                "path": args.path,
                 "replacements": occurrence_count,
                 "old_bytes": args.old_string.len(),
                 "new_bytes": args.new_string.len(),
