@@ -85,11 +85,13 @@ async fn main() -> Result<()> {
             kodegen_tools_filesystem::EditBlockTool::new(config.clone()),
         );
 
-        // Search tools
+        // Search tools - create registry for connection isolation
+        let search_registry = std::sync::Arc::new(kodegen_tools_filesystem::search::SearchRegistry::new());
+        
         let (tool_router, prompt_router) = register_tool(
             tool_router,
             prompt_router,
-            kodegen_tools_filesystem::search::FsSearchTool::new(),
+            kodegen_tools_filesystem::search::FsSearchTool::new(search_registry),
         );
 
         Ok(RouterSet::new(tool_router, prompt_router, managers))

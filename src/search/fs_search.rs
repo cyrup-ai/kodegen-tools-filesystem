@@ -1,31 +1,24 @@
-use kodegen_mcp_schema::filesystem::{FsSearchArgs, FsSearchPromptArgs};
+use kodegen_mcp_schema::filesystem::{FsSearchAction, FsSearchArgs, FsSearchPromptArgs};
 use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::json;
-use std::time::Instant;
-use anyhow;
+use std::sync::Arc;
 
-use super::types::{SearchIn, ReturnMode, CaseMode, BoundaryMode, SearchSessionOptions};
-use super::manager::{content_search, file_search, context::SearchContext};
-use std::path::PathBuf;
+use super::registry::SearchRegistry;
 
 // ============================================================================
 // TOOL STRUCT
 // ============================================================================
 
+/// Filesystem search tool with elite terminal pattern
 #[derive(Clone)]
-pub struct FsSearchTool;
+pub struct FsSearchTool {
+    registry: Arc<SearchRegistry>,
+}
 
 impl FsSearchTool {
     #[must_use]
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for FsSearchTool {
-    fn default() -> Self {
-        Self::new()
+    pub fn new(registry: Arc<SearchRegistry>) -> Self {
+        Self { registry }
     }
 }
 
@@ -161,200 +154,66 @@ impl Tool for FsSearchTool {
         false
     }
 
-    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
-        let start_time = Instant::now();
+    async fn execute(
+        &self,
+        args: Self::Args,
+        ctx: ToolExecutionContext,
+    ) -> Result<Vec<Content>, McpError> {
+        let connection_id = ctx.connection_id().unwrap_or("default");
 
-        // Handle backward compatibility: ignore_case overrides case_mode if present
-        let case_mode = if let Some(ignore_case) = args.ignore_case {
-            if ignore_case {
-                CaseMode::Insensitive
-            } else {
-                CaseMode::Sensitive
+        // Dispatch based on action
+        let result = match args.action {
+            FsSearchAction::List => {
+                // List all active searches with their current states
+                self.registry
+                    .list_all_searches(connection_id)
+                    .await
+                    .map_err(McpError::Other)?
             }
-        } else {
-            args.case_mode
-        };
+            FsSearchAction::Kill => {
+                // Gracefully cancel search and cleanup resources
+                self.registry
+                    .kill_search(connection_id, args.search)
+                    .await
+                    .map_err(McpError::Other)?
+            }
+            FsSearchAction::Read => {
+                // Read current search state without re-executing
+                let session = self
+                    .registry
+                    .find_or_create_search(connection_id, args.search)
+                    .await
+                    .map_err(McpError::Other)?;
+                
+                session
+                    .read_current_state()
+                    .await
+                    .map_err(McpError::Other)?
+            }
+            FsSearchAction::Search => {
+                // Execute search with timeout support
+                let session = self
+                    .registry
+                    .find_or_create_search(connection_id, args.search)
+                    .await
+                    .map_err(McpError::Other)?;
 
-        // Handle backward compatibility: word_boundary overrides boundary_mode if present
-        let boundary_mode = if let Some(true) = args.word_boundary {
-            log::warn!("word_boundary is deprecated, use boundary_mode='word' instead");
-            Some(BoundaryMode::Word)
-        } else {
-            // Parse boundary_mode string to enum
-            match args.boundary_mode.as_deref() {
-                None => None,
-                Some("word") => Some(BoundaryMode::Word),
-                Some("line") => Some(BoundaryMode::Line),
-                Some(other) => {
-                    return Err(McpError::InvalidArguments(format!(
-                        "Invalid boundary_mode '{other}'. Must be 'word', 'line', or null"
-                    )));
-                }
+                session
+                    .execute_search_with_timeout(args.clone(), args.await_completion_ms)
+                    .await
+                    .map_err(McpError::Other)?
             }
         };
 
-        // Validate only_matching only works with content search
-        if args.only_matching && args.search_in != SearchIn::Content {
-            return Err(McpError::InvalidArguments(
-                "only_matching can only be used with search_in 'content'".to_string(),
-            ));
-        }
-
-        // Warn if only_matching + invert_match (illogical combination)
-        if args.only_matching && args.invert_match {
-            log::warn!(
-                "only_matching + invert_match: nothing to extract from non-matches, ignoring only_matching"
-            );
-        }
-
-        // Warn if only_matching with non-Matches return mode (only_matching has no effect)
-        if args.only_matching && args.return_only != ReturnMode::Matches {
-            log::warn!(
-                "only_matching with return_only={:?}: non-Matches modes don't have match text, ignoring only_matching",
-                args.return_only
-            );
-        }
-
-        let options = SearchSessionOptions {
-            root_path: args.path.clone(),
-            pattern: args.pattern.clone(),
-            search_in: args.search_in,
-            file_pattern: args.file_pattern,
-            r#type: args.r#type,
-            type_not: args.type_not,
-            case_mode,
-            max_results: args.max_results,
-            include_hidden: args.include_hidden,
-            no_ignore: args.no_ignore,
-            context: args.context,
-            before_context: args.before_context,
-            after_context: args.after_context,
-            timeout_ms: args.timeout_ms,
-            early_termination: args.early_termination,
-            literal_search: args.literal_search,
-            boundary_mode,
-            return_only: args.return_only,
-            invert_match: args.invert_match,
-            engine: args.engine,
-            preprocessor: args.preprocessor,
-            preprocessor_globs: args.preprocessor_globs,
-            search_zip: args.search_zip,
-            binary_mode: args.binary_mode,
-            multiline: args.multiline,
-            max_filesize: args.max_filesize,
-            max_depth: args.max_depth,
-            only_matching: args.only_matching,
-            sort_by: args.sort_by,
-            sort_direction: args.sort_direction,
-            encoding: args.encoding,
-        };
-
-        // Prepare data for blocking task
-        let options_owned = options.clone();
-        let root = PathBuf::from(&args.path);
-        let search_in = args.search_in;
-        let max_results = options.max_results.map(|v| v as usize).unwrap_or(usize::MAX);
-        let return_only = options.return_only;
-
-        // Execute search in blocking threadpool to avoid blocking async runtime
-        // Extract all data inside spawn_blocking to avoid blocking operations in async context
-        let (results, errors, total_matches, total_files, error_count, is_complete, is_error, error) =
-            tokio::task::spawn_blocking(move || {
-                let mut ctx = SearchContext::new(max_results, return_only);
-                match search_in {
-                    SearchIn::Content => content_search::execute(&options_owned, &root, &mut ctx),
-                    SearchIn::Filenames => file_search::execute(&options_owned, &root, &mut ctx),
-                }
-
-                // Extract all data inside spawn_blocking (sync context)
-                let results = ctx.results().blocking_read().clone();
-                let errors = ctx.errors().blocking_read().clone();
-                let total_matches = ctx.total_matches();
-                let total_files = ctx.total_files();
-                let error_count = ctx.error_count_value();
-                let is_complete = ctx.is_complete;
-                let is_error = ctx.is_error;
-                let error = ctx.error.clone();
-
-                (results, errors, total_matches, total_files, error_count, is_complete, is_error, error)
-            })
-            .await
-            .map_err(|e| McpError::Other(anyhow::anyhow!("Search task panicked: {e}")))?;
-
-        let runtime_ms = start_time.elapsed().as_millis() as u64;
-        let total_results = results.len();
-
-        // Determine if results were limited
-        let max_results_value = args.max_results.map(|v| v as usize).unwrap_or(usize::MAX);
-        let results_limited = total_results >= max_results_value;
-
-        let mut contents = Vec::new();
-
-        // Content 1: Human-readable summary
-        let status = if is_error {
-            "failed"
-        } else if is_complete {
-            "completed"
-        } else {
-            "incomplete"
-        };
-
-        let search_type_str = match args.search_in {
-            SearchIn::Filenames => "filenames",
-            SearchIn::Content => "content",
-        };
-
-        let summary = if is_error {
-            format!(
-                "\x1b[31m✗ Search failed: {}\x1b[0m\n\
-                 Pattern: \"{}\"\n\
-                 Error: {}",
-                search_type_str,
-                args.pattern,
-                error.as_deref().unwrap_or("Unknown error")
-            )
-        } else {
-            format!(
-                "\x1b[36m✓ Search completed: {}\x1b[0m\n\
-                 Pattern: \"{}\" · Status: {}\n\
-                 Results: {} · Matches: {} · Files: {} · Errors: {} · Time: {}ms{}",
-                search_type_str,
-                args.pattern,
-                status,
-                total_results,
-                total_matches,
-                total_files,
-                error_count,
-                runtime_ms,
-                if results_limited { " (limited)" } else { "" }
-            )
-        };
-        contents.push(Content::text(summary));
-
-        // Content 2: JSON metadata
-        let metadata = json!({
-            "success": !is_error,
-            "is_complete": is_complete,
-            "is_error": is_error,
-            "error": error,
-            "results": results.clone(),
-            "errors": errors.clone(),
-            "total_results": total_results,
-            "total_matches": total_matches,
-            "total_files": total_files,
-            "error_count": error_count,
-            "runtime_ms": runtime_ms,
-            "max_results": args.max_results,
-            "results_limited": results_limited,
-            "pattern": args.pattern,
-            "path": args.path,
-            "search_type": search_type_str,
-        });
-        let json_str = serde_json::to_string_pretty(&metadata)
+        // Return both human-readable summary and JSON
+        let summary = result["output"].as_str().unwrap_or("Search result");
+        let json_str = serde_json::to_string_pretty(&result)
             .unwrap_or_else(|_| "{}".to_string());
-        contents.push(Content::text(json_str));
 
-        Ok(contents)
+        Ok(vec![
+            Content::text(summary.to_string()),
+            Content::text(json_str),
+        ])
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

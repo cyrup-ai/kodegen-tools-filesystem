@@ -132,11 +132,13 @@ pub async fn start_server(
                 crate::EditBlockTool::new(config.clone()),
             );
 
-            // Search tools
+            // Search tools - create registry for connection isolation
+            let search_registry = std::sync::Arc::new(crate::search::SearchRegistry::new());
+            
             let (tool_router, prompt_router) = register_tool(
                 tool_router,
                 prompt_router,
-                crate::search::FsSearchTool::new(),
+                crate::search::FsSearchTool::new(search_registry),
             );
 
             Ok(RouterSet::new(tool_router, prompt_router, managers))
