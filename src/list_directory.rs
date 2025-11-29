@@ -1,4 +1,4 @@
-use crate::validate_path;
+use crate::{validate_path, display_path_relative_to_git_root};
 use kodegen_mcp_schema::filesystem::{FsListDirectoryArgs, FsListDirectoryPromptArgs};
 use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use log::warn;
@@ -44,7 +44,7 @@ impl Tool for ListDirectoryTool {
         true
     }
 
-    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
 
         let mut entries = fs::read_dir(&valid_path).await?;
@@ -92,9 +92,10 @@ impl Tool for ListDirectoryTool {
         // Content[0]: Human-Readable Summary
         // ========================================
         let total = items.len();
+        let display_path = display_path_relative_to_git_root(&valid_path, ctx.git_root());
         let summary = format!(
             "\x1b[36m󰉋 Listed directory: {}\x1b[0m\n 󰄵 Contents: {} items ({} dirs · {} files)",
-            valid_path.display(),
+            display_path,
             total,
             dir_count,
             file_count

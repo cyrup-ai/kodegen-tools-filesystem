@@ -108,6 +108,25 @@ impl SearchRegistry {
             ))
         }
     }
+
+    /// Cleanup all searches for a connection (called on connection drop)
+    pub async fn cleanup_connection(&self, connection_id: &str) -> usize {
+        let mut searches = self.searches.lock().await;
+        let to_remove: Vec<(String, u32)> = searches
+            .keys()
+            .filter(|(conn_id, _)| conn_id == connection_id)
+            .cloned()
+            .collect();
+        
+        let count = to_remove.len();
+        for key in to_remove {
+            if let Some(session) = searches.remove(&key) {
+                log::debug!("Cleaning up search {} for connection {}", key.1, connection_id);
+                let _ = session.cancel().await;
+            }
+        }
+        count
+    }
 }
 
 impl Default for SearchRegistry {

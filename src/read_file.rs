@@ -1,4 +1,4 @@
-use crate::validate_path;
+use crate::{validate_path, display_path_relative_to_git_root};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use kodegen_mcp_schema::filesystem::{FsReadFileArgs, FsReadFilePromptArgs};
 use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
@@ -305,7 +305,7 @@ impl Tool for ReadFileTool {
         true // Can read from URLs
     }
 
-    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         // Auto-detect URL if not specified
         let is_url =
             args.is_url || args.path.starts_with("http://") || args.path.starts_with("https://");
@@ -332,19 +332,30 @@ impl Tool for ReadFileTool {
         // ========================================
         // Content[0]: Human-Readable Summary
         // ========================================
+        
+        // For URLs, display as-is; for file paths, use relative path if in git repo
+        let display_path = if is_url {
+            args.path.clone()
+        } else {
+            display_path_relative_to_git_root(
+                std::path::Path::new(&args.path),
+                ctx.git_root()
+            )
+        };
+        
         let summary = if is_image {
             // For images: summary describes the image
             let size_kb = size_bytes.map_or(0.0, |b| b as f64 / 1024.0);
             format!(
                 "\x1b[36m󰗚 Read image: {}\x1b[0m\n 󰈙 Format: {} · Size: {:.1} KB",
-                args.path, mime_type, size_kb
+                display_path, mime_type, size_kb
             )
         } else {
             // For text files: show summary only, content is in Content[1]
             let read = lines_read.unwrap_or(0);
             format!(
                 "\x1b[36m󰗚 Read file: {}\x1b[0m\n 󰈙 Content: {} lines · {} bytes · Use Content[1] for data",
-                args.path, read, content.len()
+                display_path, read, content.len()
             )
         };
         contents.push(Content::text(summary));

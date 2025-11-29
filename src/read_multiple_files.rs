@@ -155,7 +155,7 @@ impl Tool for ReadMultipleFilesTool {
         false // Only reads local files, not URLs
     }
 
-    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         if args.paths.is_empty() {
             return Err(McpError::InvalidArguments(
                 "No paths provided. Please provide at least one file path.".to_string(),
@@ -166,7 +166,7 @@ impl Tool for ReadMultipleFilesTool {
         let read_futures = args
             .paths
             .into_iter()
-            .map(|path| self.read_one_file(path, args.offset, args.length, &_ctx));
+            .map(|path| self.read_one_file(path, args.offset, args.length, &ctx));
 
         // Execute all reads in parallel
         let results = future::join_all(read_futures).await;

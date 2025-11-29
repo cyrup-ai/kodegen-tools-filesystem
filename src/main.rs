@@ -3,8 +3,10 @@
 //! Serves filesystem tools via HTTP/HTTPS transport using kodegen_server_http.
 
 use anyhow::Result;
-use kodegen_server_http::{run_http_server, Managers, RouterSet, register_tool};
+use kodegen_server_http::{run_http_server, Managers, RouterSet, register_tool, ConnectionCleanupFn};
 use rmcp::handler::server::router::{prompt::PromptRouter, tool::ToolRouter};
+use std::future::Future;
+use std::pin::Pin;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -91,10 +93,25 @@ async fn main() -> Result<()> {
         let (tool_router, prompt_router) = register_tool(
             tool_router,
             prompt_router,
-            kodegen_tools_filesystem::search::FsSearchTool::new(search_registry),
+            kodegen_tools_filesystem::search::FsSearchTool::new(search_registry.clone()),
         );
 
-        Ok(RouterSet::new(tool_router, prompt_router, managers))
+        // Create cleanup callback for connection dropped notification
+        let cleanup: ConnectionCleanupFn = std::sync::Arc::new(move |connection_id: String| {
+            let registry = search_registry.clone();
+            Box::pin(async move {
+                let cleaned = registry.cleanup_connection(&connection_id).await;
+                log::info!(
+                    "Connection {}: cleaned up {} search session(s)",
+                    connection_id,
+                    cleaned
+                );
+            }) as Pin<Box<dyn Future<Output = ()> + Send + 'static>>
+        });
+
+        let mut router_set = RouterSet::new(tool_router, prompt_router, managers);
+        router_set.connection_cleanup = Some(cleanup);
+        Ok(router_set)
         })
     })
     .await

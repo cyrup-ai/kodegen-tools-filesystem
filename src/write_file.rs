@@ -1,4 +1,4 @@
-use crate::validate_path;
+use crate::{validate_path, display_path_relative_to_git_root};
 use kodegen_mcp_schema::filesystem::{FsWriteFileArgs, FsWriteFilePromptArgs};
 use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
@@ -53,7 +53,7 @@ impl Tool for WriteFileTool {
         false // Each write changes the file
     }
 
-    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
 
         // Create parent directories if needed
@@ -92,11 +92,12 @@ impl Tool for WriteFileTool {
         } else {
             "Wrote"
         };
+        let display_path = display_path_relative_to_git_root(&valid_path, ctx.git_root());
         let summary = format!(
             "\x1b[32m󰏫 {} file: {}\x1b[0m\n\
              󰄴 Written: {} bytes ({} lines) · Mode: {}",
             verb,
-            valid_path.display(),
+            display_path,
             content_bytes,
             line_count,
             args.mode

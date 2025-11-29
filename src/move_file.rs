@@ -1,4 +1,4 @@
-use crate::validate_path;
+use crate::{validate_path, display_path_relative_to_git_root};
 use kodegen_mcp_schema::filesystem::{FsMoveFileArgs, FsMoveFilePromptArgs};
 use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
@@ -42,7 +42,7 @@ impl Tool for MoveFileTool {
         false // Moving twice would fail (source no longer exists)
     }
 
-    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         let source_path = validate_path(&args.source, &self.config_manager).await?;
         let dest_path = validate_path(&args.destination, &self.config_manager).await?;
 
@@ -51,12 +51,14 @@ impl Tool for MoveFileTool {
         let mut contents = Vec::new();
 
         // Human summary
+        let display_source = display_path_relative_to_git_root(&source_path, ctx.git_root());
+        let display_dest = display_path_relative_to_git_root(&dest_path, ctx.git_root());
         let summary = format!(
             "\x1b[34m󰉐 Moved file/directory\x1b[0m\n\
              󰜱 From: {}\n\
              󰜱 To:   {}",
-            source_path.display(),
-            dest_path.display()
+            display_source,
+            display_dest
         );
         contents.push(Content::text(summary));
 

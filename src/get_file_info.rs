@@ -1,4 +1,4 @@
-use crate::validate_path;
+use crate::{validate_path, display_path_relative_to_git_root};
 use kodegen_mcp_schema::filesystem::{FsGetFileInfoArgs, FsGetFileInfoPromptArgs};
 use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
 use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
@@ -68,7 +68,7 @@ impl Tool for GetFileInfoTool {
         true
     }
 
-    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager).await?;
         let stats = fs::metadata(&valid_path).await?;
 
@@ -157,11 +157,12 @@ impl Tool for GetFileInfoTool {
         let line_count_str = line_count_opt.map_or(String::new(), |lc| format!("{} lines · ", lc));
 
         // Build compact two-line format with magenta color on line 1 only
+        let display_path = display_path_relative_to_git_root(&valid_path, ctx.git_root());
         let summary = format!(
             "\x1b[35m󰙅 {} Metadata: {}\x1b[0m\n\
              󰘖 Details: {} · {}Modified: {} · Perms: {}",
             type_str,
-            valid_path.display(),
+            display_path,
             size_str,
             line_count_str,
             time_str,

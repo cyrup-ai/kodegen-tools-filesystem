@@ -1,4 +1,4 @@
-use crate::validate_path;
+use crate::{validate_path, display_path_relative_to_git_root};
 use chrono::Utc;
 use kodegen_mcp_schema::filesystem::{FsEditBlockArgs, FsEditBlockPromptArgs};
 use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
@@ -685,7 +685,7 @@ impl Tool for EditBlockTool {
         false // Each replacement changes content
     }
 
-    async fn execute(&self, args: Self::Args, _ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
         let start_time = Instant::now(); // START TIMER
 
         // Validate inputs
@@ -957,11 +957,15 @@ impl Tool for EditBlockTool {
             } else {
                 format!("{}", delta)
             };
+            let display_path = display_path_relative_to_git_root(
+                std::path::Path::new(&args.path),
+                ctx.git_root()
+            );
             let summary = format!(
                 "\x1b[33m󰆐 {} replacement(s) in {}\x1b[0m\n\
                  󰢬 Precision: {} → {} bytes (delta: {}){}",
                 occurrence_count,
-                args.path,
+                display_path,
                 args.old_string.len(),
                 args.new_string.len(),
                 delta_str,
@@ -1014,10 +1018,14 @@ impl Tool for EditBlockTool {
             } else {
                 format!("{}", delta)
             };
+            let display_path = display_path_relative_to_git_root(
+                std::path::Path::new(&args.path),
+                ctx.git_root()
+            );
             let summary = format!(
                 "\x1b[33m󰆐 {} replacement(s) in {}\x1b[0m\n 󰢬 Precision: {} → {} bytes (delta: {}) · Expected: {} · See Content[1] for details{}",
                 occurrence_count,
-                args.path,
+                display_path,
                 args.old_string.len(),
                 args.new_string.len(),
                 delta_str,
