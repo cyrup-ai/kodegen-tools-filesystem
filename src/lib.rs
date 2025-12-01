@@ -145,3 +145,109 @@ pub async fn start_server(
         })
     }).await
 }
+
+/// Start filesystem HTTP server using pre-bound listener (TOCTOU-safe)
+///
+/// This variant is used by kodegend to eliminate TOCTOU race conditions
+/// during port cleanup. The listener is already bound to a port.
+///
+/// # Arguments
+/// * `listener` - Pre-bound TcpListener (port already reserved)
+/// * `tls_config` - Optional (cert_path, key_path) for HTTPS
+///
+/// # Returns
+/// ServerHandle for graceful shutdown, or error if startup fails
+pub async fn start_server_with_listener(
+    listener: tokio::net::TcpListener,
+    tls_config: Option<(std::path::PathBuf, std::path::PathBuf)>,
+) -> anyhow::Result<kodegen_server_http::ServerHandle> {
+    use kodegen_server_http::{create_http_server_with_listener, Managers, RouterSet, register_tool};
+    use rmcp::handler::server::router::{prompt::PromptRouter, tool::ToolRouter};
+    use std::time::Duration;
+
+    let shutdown_timeout = Duration::from_secs(30);
+    let session_keep_alive = Duration::ZERO;
+
+    create_http_server_with_listener("filesystem", listener, tls_config, shutdown_timeout, session_keep_alive, |config: &kodegen_config_manager::ConfigManager, _tracker| {
+        let config = config.clone();
+        Box::pin(async move {
+            let tool_router = ToolRouter::new();
+            let prompt_router = PromptRouter::new();
+            let managers = Managers::new();
+
+            let file_read_line_limit = config.get_file_read_line_limit();
+
+            // Register all 14 filesystem tools
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::ReadFileTool::new(file_read_line_limit, config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::ReadMultipleFilesTool::new(file_read_line_limit, config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::WriteFileTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::MoveFileTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::DeleteFileTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::DeleteDirectoryTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::ListDirectoryTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::CreateDirectoryTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::GetFileInfoTool::new(config.clone()),
+            );
+
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::EditBlockTool::new(config.clone()),
+            );
+
+            // Search tools - create registry for connection isolation
+            let search_registry = std::sync::Arc::new(crate::search::SearchRegistry::new());
+            
+            let (tool_router, prompt_router) = register_tool(
+                tool_router,
+                prompt_router,
+                crate::search::FsSearchTool::new(search_registry),
+            );
+
+            Ok(RouterSet::new(tool_router, prompt_router, managers))
+        })
+    }).await
+}
