@@ -13,7 +13,7 @@ Memory-efficient, blazing-fast MCP (Model Context Protocol) filesystem tools for
 
 `kodegen-tools-filesystem` provides a comprehensive suite of 11 filesystem and search tools exposed via the Model Context Protocol (MCP). Built on top of ripgrep's powerful search capabilities, it offers high-performance file operations, directory management, and advanced code search functionality for AI agents.
 
-## Features
+## Features 
 
 ### File Operations
 - **Read Files**: Single or batch file reading with offset/length support
