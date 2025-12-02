@@ -18,13 +18,24 @@ pub fn execute(
     use ignore::WalkBuilder;
     use std::sync::atomic::Ordering;
 
-    // Try to compile as glob pattern first
+    // Only use glob matching if pattern contains actual glob metacharacters
+    // Otherwise, use substring matching for intuitive filename search behavior
     let glob_pattern = if options.literal_search {
         None
     } else {
-        globset::Glob::new(&options.pattern)
-            .ok()
-            .map(|g| g.compile_matcher())
+        // Check for glob metacharacters: *, ?, [, {
+        let has_glob_chars = options.pattern.contains('*')
+            || options.pattern.contains('?')
+            || options.pattern.contains('[')
+            || options.pattern.contains('{');
+
+        if has_glob_chars {
+            globset::Glob::new(&options.pattern)
+                .ok()
+                .map(|g| g.compile_matcher())
+        } else {
+            None // Fall through to substring matching in visitor
+        }
     };
     let pattern_lower = options.pattern.to_lowercase();
 

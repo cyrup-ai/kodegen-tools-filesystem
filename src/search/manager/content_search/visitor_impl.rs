@@ -135,6 +135,9 @@ impl ParallelVisitor for ContentSearchVisitor {
                                                 seen.insert(result.file.clone());
                                                 drop(seen); // Release lock before next operation
 
+                                                // Increment total_files to match total_matches in Paths mode
+                                                self.total_files.fetch_add(1, Ordering::SeqCst);
+
                                                 // Add deduplicated result
                                                 let file_result = SearchResult {
                                                     file: result.file,
