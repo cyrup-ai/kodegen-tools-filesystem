@@ -1,7 +1,7 @@
 use crate::{validate_path, display_path_relative_to_git_root};
 use chrono::Utc;
-use kodegen_mcp_schema::filesystem::{FsEditBlockArgs, FsEditBlockPromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
+use kodegen_mcp_schema::filesystem::{FsEditBlockArgs, FsEditBlockOutput, FsEditBlockPromptArgs};
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
 use kodegen_utils::char_analysis::CharCodeData;
 use kodegen_utils::char_diff::CharDiff;
 use kodegen_utils::edit_log::{EditBlockLogEntry, EditBlockResult, get_edit_logger};
@@ -9,8 +9,7 @@ use kodegen_utils::fuzzy_logger::{FuzzySearchLogEntry, get_logger};
 use kodegen_utils::fuzzy_search::{get_similarity_ratio, recursive_fuzzy_index_of_with_defaults};
 use kodegen_utils::line_endings::{detect_line_ending, normalize_line_endings};
 use kodegen_utils::suggestions::{EditFailureReason, Suggestion, SuggestionContext};
-use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::json;
+use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use std::time::Instant;
 use tokio::fs;
 
@@ -685,7 +684,7 @@ impl Tool for EditBlockTool {
         false // Each replacement changes content
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
         let start_time = Instant::now(); // START TIMER
 
         // Validate inputs
@@ -701,7 +700,7 @@ impl Tool for EditBlockTool {
             ));
         }
 
-        let valid_path = validate_path(&args.path, &self.config_manager).await?;
+        let valid_path = validate_path(&args.path, &self.config_manager, ctx.pwd()).await?;
 
         // Get file extension for response
         let extension = valid_path
@@ -948,111 +947,75 @@ impl Tool for EditBlockTool {
 
         if occurrence_count == args.expected_replacements {
             // Exact match - success
-            let mut contents = Vec::new();
-
-            // Human summary
             let delta = args.new_string.len() as i64 - args.old_string.len() as i64;
             let delta_str = if delta >= 0 {
-                format!("+{}", delta)
+                format!("+{delta}")
             } else {
-                format!("{}", delta)
+                format!("{delta}")
             };
             let display_path = display_path_relative_to_git_root(
                 std::path::Path::new(&args.path),
                 ctx.git_root()
             );
             let summary = format!(
-                "\x1b[33m󰆐 {} replacement(s) in {}\x1b[0m\n\
-                 󰢬 Precision: {} → {} bytes (delta: {}){}",
+                "\x1b[33m󰆐 {} replacement(s) in {display_path}\x1b[0m\n\
+                 󰢬 Precision: {} → {} bytes (delta: {delta_str}){warning}",
                 occurrence_count,
-                display_path,
                 args.old_string.len(),
                 args.new_string.len(),
-                delta_str,
-                warning
-            );
-            contents.push(Content::text(summary));
-
-            // JSON metadata
-            let metadata = json!({
-                "success": true,
-                "path": args.path,
-                "replacements": occurrence_count,
-                "old_bytes": args.old_string.len(),
-                "new_bytes": args.new_string.len(),
-                "delta_bytes": delta,
-                "expected_replacements": args.expected_replacements,
-                "matched_expected": true,
-                "file_extension": extension
-            });
-            let json_str = serde_json::to_string_pretty(&metadata)
-                .unwrap_or_else(|_| "{}".to_string());
-            contents.push(Content::text(json_str));
-
-            Ok(contents)
-        } else {
-            // Mismatch - success with warning and suggestions
-            let context = SuggestionContext {
-                file_path: args.path.clone(),
-                search_string: args.old_string.clone(),
-                line_number: None,
-                log_path: None,
-                execution_time_ms: None,
-            };
-
-            let suggestion = Suggestion::for_failure(
-                &EditFailureReason::UnexpectedCount {
-                    expected: args.expected_replacements,
-                    found: occurrence_count,
-                },
-                &context,
             );
 
-            // Return success with warning and suggestions
-            let mut contents = Vec::new();
-
-            // Human summary with warning
-            let delta = args.new_string.len() as i64 - args.old_string.len() as i64;
-            let delta_str = if delta >= 0 {
-                format!("+{}", delta)
-            } else {
-                format!("{}", delta)
-            };
-            let display_path = display_path_relative_to_git_root(
-                std::path::Path::new(&args.path),
-                ctx.git_root()
-            );
-            let summary = format!(
-                "\x1b[33m󰆐 {} replacement(s) in {}\x1b[0m\n 󰢬 Precision: {} → {} bytes (delta: {}) · Expected: {} · See Content[1] for details{}",
-                occurrence_count,
-                display_path,
-                args.old_string.len(),
-                args.new_string.len(),
-                delta_str,
-                args.expected_replacements,
-                warning
-            );
-            contents.push(Content::text(summary));
-
-            // JSON metadata
-            let metadata = json!({
-                "success": true,
-                "path": args.path,
-                "replacements": occurrence_count,
-                "old_bytes": args.old_string.len(),
-                "new_bytes": args.new_string.len(),
-                "delta_bytes": delta,
-                "expected_replacements": args.expected_replacements,
-                "matched_expected": false,
-                "warning": suggestion.message,
-                "file_extension": extension
-            });
-            let json_str = serde_json::to_string_pretty(&metadata)
-                .unwrap_or_else(|_| "{}".to_string());
-            contents.push(Content::text(json_str));
-
-            Ok(contents)
+            return Ok(ToolResponse::new(summary, FsEditBlockOutput {
+                success: true,
+                path: valid_path.to_string_lossy().to_string(),
+                replacements_made: occurrence_count as u32,
+                message: format!("Successfully replaced {} occurrence(s)", occurrence_count),
+            }));
         }
+
+        // Mismatch - success with warning and suggestions
+        let context = SuggestionContext {
+            file_path: args.path.clone(),
+            search_string: args.old_string.clone(),
+            line_number: None,
+            log_path: None,
+            execution_time_ms: None,
+        };
+
+        let suggestion = Suggestion::for_failure(
+            &EditFailureReason::UnexpectedCount {
+                expected: args.expected_replacements,
+                found: occurrence_count,
+            },
+            &context,
+        );
+
+        // Human summary with warning
+        let delta = args.new_string.len() as i64 - args.old_string.len() as i64;
+        let delta_str = if delta >= 0 {
+            format!("+{delta}")
+        } else {
+            format!("{delta}")
+        };
+        let display_path = display_path_relative_to_git_root(
+            std::path::Path::new(&args.path),
+            ctx.git_root()
+        );
+        let summary = format!(
+            "\x1b[33m󰆐 {} replacement(s) in {display_path}\x1b[0m\n\
+             󰢬 Precision: {} → {} bytes (delta: {delta_str}) · Expected: {}{warning}",
+            occurrence_count,
+            args.old_string.len(),
+            args.new_string.len(),
+            args.expected_replacements,
+        );
+
+        Ok(ToolResponse::new(summary, FsEditBlockOutput {
+            success: true,
+            path: valid_path.to_string_lossy().to_string(),
+            replacements_made: occurrence_count as u32,
+            message: format!("Warning: {} - Expected {} replacements but made {}", suggestion.message, args.expected_replacements, occurrence_count),
+        }))
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

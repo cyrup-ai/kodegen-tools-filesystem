@@ -1,9 +1,8 @@
 use crate::{validate_path, display_path_relative_to_git_root};
-use kodegen_mcp_schema::filesystem::{FsListDirectoryArgs, FsListDirectoryPromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
+use kodegen_mcp_schema::filesystem::{DirectoryEntry, FsListDirectoryArgs, FsListDirectoryOutput, FsListDirectoryPromptArgs};
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
 use log::warn;
-use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::json;
+use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use tokio::fs;
 
 // ============================================================================
@@ -44,15 +43,15 @@ impl Tool for ListDirectoryTool {
         true
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
-        let valid_path = validate_path(&args.path, &self.config_manager).await?;
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
+        let valid_path = validate_path(&args.path, &self.config_manager, ctx.pwd()).await?;
 
-        let mut entries = fs::read_dir(&valid_path).await?;
-        let mut items = Vec::new();
+        let mut read_entries = fs::read_dir(&valid_path).await?;
+        let mut entries = Vec::new();
         let mut dir_count = 0;
         let mut file_count = 0;
 
-        while let Some(entry) = entries.next_entry().await? {
+        while let Some(entry) = read_entries.next_entry().await? {
             let name = entry.file_name().to_string_lossy().to_string();
 
             // Skip hidden files if requested
@@ -75,23 +74,23 @@ impl Tool for ListDirectoryTool {
             };
 
             if is_dir {
-                items.push(format!("[DIR]  {name}"));
                 dir_count += 1;
             } else {
-                items.push(format!("[FILE] {name}"));
                 file_count += 1;
             }
+
+            entries.push(DirectoryEntry {
+                name,
+                is_directory: is_dir,
+                size_bytes: None,
+            });
         }
 
         // Sort for consistent output
-        items.sort();
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let mut contents = Vec::new();
-
-        // ========================================
-        // Content[0]: Human-Readable Summary
-        // ========================================
-        let total = items.len();
+        // Human summary
+        let total = entries.len();
         let display_path = display_path_relative_to_git_root(&valid_path, ctx.git_root());
         let summary = format!(
             "\x1b[36m󰉋 Listed directory: {}\x1b[0m\n 󰄵 Contents: {} items ({} dirs · {} files)",
@@ -101,24 +100,14 @@ impl Tool for ListDirectoryTool {
             file_count
         );
 
-        contents.push(Content::text(summary));
-
-        // ========================================
-        // Content[1]: Machine-Parseable JSON
-        // ========================================
-        let metadata = json!({
-            "success": true,
-            "path": valid_path.to_string_lossy(),
-            "total": total,
-            "directories": dir_count,
-            "files": file_count,
-            "entries": items
-        });
-        let json_str = serde_json::to_string_pretty(&metadata)
-            .unwrap_or_else(|_| "{}".to_string());
-        contents.push(Content::text(json_str));
-
-        Ok(contents)
+        Ok(ToolResponse::new(summary, FsListDirectoryOutput {
+            success: true,
+            path: valid_path.to_string_lossy().to_string(),
+            total_entries: total,
+            directories: dir_count,
+            files: file_count,
+            entries,
+        }))
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

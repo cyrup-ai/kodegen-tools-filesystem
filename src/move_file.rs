@@ -1,8 +1,7 @@
 use crate::{validate_path, display_path_relative_to_git_root};
-use kodegen_mcp_schema::filesystem::{FsMoveFileArgs, FsMoveFilePromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
-use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::json;
+use kodegen_mcp_schema::filesystem::{FsMoveFileArgs, FsMoveFileOutput, FsMoveFilePromptArgs};
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
+use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use tokio::fs;
 
 #[derive(Clone)]
@@ -42,13 +41,12 @@ impl Tool for MoveFileTool {
         false // Moving twice would fail (source no longer exists)
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
-        let source_path = validate_path(&args.source, &self.config_manager).await?;
-        let dest_path = validate_path(&args.destination, &self.config_manager).await?;
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
+        let client_pwd = ctx.pwd();
+        let source_path = validate_path(&args.source, &self.config_manager, client_pwd).await?;
+        let dest_path = validate_path(&args.destination, &self.config_manager, client_pwd).await?;
 
         fs::rename(&source_path, &dest_path).await?;
-
-        let mut contents = Vec::new();
 
         // Human summary
         let display_source = display_path_relative_to_git_root(&source_path, ctx.git_root());
@@ -60,19 +58,13 @@ impl Tool for MoveFileTool {
             display_source,
             display_dest
         );
-        contents.push(Content::text(summary));
 
-        // JSON metadata
-        let metadata = json!({
-            "success": true,
-            "source": source_path.to_string_lossy(),
-            "destination": dest_path.to_string_lossy()
-        });
-        let json_str = serde_json::to_string_pretty(&metadata)
-            .unwrap_or_else(|_| "{}".to_string());
-        contents.push(Content::text(json_str));
-
-        Ok(contents)
+        Ok(ToolResponse::new(summary, FsMoveFileOutput {
+            success: true,
+            source: source_path.to_string_lossy().to_string(),
+            destination: dest_path.to_string_lossy().to_string(),
+            message: "File/directory moved successfully".to_string(),
+        }))
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

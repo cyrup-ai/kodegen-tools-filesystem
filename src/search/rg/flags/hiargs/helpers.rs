@@ -4,7 +4,7 @@ Helper functions for building high-level arguments.
 Contains utility functions for constructing various configuration objects.
 */
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::types::State;
 use crate::search::rg::flags::lowargs::{LowArgs, TypeChange};
@@ -43,20 +43,28 @@ pub(crate) fn preprocessor_globs(
 
 /// Attempts to discover the current working directory.
 ///
-/// This mostly just defers to the standard library, however, such things will
-/// fail if ripgrep is in a directory that no longer exists. We attempt some
-/// fallback mechanisms, such as querying the PWD environment variable, but
-/// otherwise return an error.
-pub(crate) fn current_dir() -> anyhow::Result<PathBuf> {
+/// Prefers client's pwd from ToolExecutionContext when available (for HTTP MCP servers).
+/// Falls back to server's pwd for non-HTTP usage (library usage, tests).
+/// Final fallback to PWD environment variable in exotic circumstances.
+pub(crate) fn current_dir(client_pwd: Option<&Path>) -> anyhow::Result<PathBuf> {
+    // PRIORITY 1: Use client's pwd if available (HTTP MCP server scenario)
+    if let Some(pwd) = client_pwd {
+        return Ok(pwd.to_path_buf());
+    }
+
+    // PRIORITY 2: Fallback to server's pwd for non-HTTP usage
     let err = match std::env::current_dir() {
         Err(err) => err,
         Ok(cwd) => return Ok(cwd),
     };
+
+    // PRIORITY 3: Final fallback to PWD environment variable
     if let Some(cwd) = std::env::var_os("PWD")
         && !cwd.is_empty()
     {
         return Ok(PathBuf::from(cwd));
     }
+
     anyhow::bail!(
         "failed to get current working directory: {err}\n\
          did your CWD get deleted?",

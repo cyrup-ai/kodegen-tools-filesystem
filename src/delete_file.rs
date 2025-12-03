@@ -1,8 +1,7 @@
 use crate::{validate_path, display_path_relative_to_git_root};
-use kodegen_mcp_schema::filesystem::{FsDeleteFileArgs, FsDeleteFilePromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
-use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::json;
+use kodegen_mcp_schema::filesystem::{FsDeleteFileArgs, FsDeleteFileOutput, FsDeleteFilePromptArgs};
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
+use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use tokio::fs;
 
 #[derive(Clone)]
@@ -42,8 +41,8 @@ impl Tool for DeleteFileTool {
         false // Deleting twice will fail (file no longer exists)
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
-        let valid_path = validate_path(&args.path, &self.config_manager).await?;
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
+        let valid_path = validate_path(&args.path, &self.config_manager, ctx.pwd()).await?;
 
         // Check file type (errors propagate naturally)
         let metadata = tokio::fs::metadata(&valid_path).await?;
@@ -56,8 +55,6 @@ impl Tool for DeleteFileTool {
 
         fs::remove_file(&valid_path).await?;
 
-        let mut contents = Vec::new();
-
         // Human summary
         let display_path = display_path_relative_to_git_root(&valid_path, ctx.git_root());
         let summary = format!(
@@ -65,18 +62,12 @@ impl Tool for DeleteFileTool {
              󰚽 Permanent: File removed from filesystem",
             display_path
         );
-        contents.push(Content::text(summary));
 
-        // JSON metadata
-        let metadata = json!({
-            "success": true,
-            "path": valid_path.to_string_lossy()
-        });
-        let json_str = serde_json::to_string_pretty(&metadata)
-            .unwrap_or_else(|_| "{}".to_string());
-        contents.push(Content::text(json_str));
-
-        Ok(contents)
+        Ok(ToolResponse::new(summary, FsDeleteFileOutput {
+            success: true,
+            path: valid_path.to_string_lossy().to_string(),
+            message: "File deleted successfully".to_string(),
+        }))
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

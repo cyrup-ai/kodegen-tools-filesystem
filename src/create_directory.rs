@@ -1,8 +1,7 @@
 use crate::{validate_path, display_path_relative_to_git_root};
-use kodegen_mcp_schema::filesystem::{FsCreateDirectoryArgs, FsCreateDirectoryPromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
-use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::json;
+use kodegen_mcp_schema::filesystem::{FsCreateDirectoryArgs, FsCreateDirectoryOutput, FsCreateDirectoryPromptArgs};
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
+use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use tokio::fs;
 
 // ============================================================================
@@ -50,12 +49,10 @@ impl Tool for CreateDirectoryTool {
         true // Can be called multiple times safely
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
-        let valid_path = validate_path(&args.path, &self.config_manager).await?;
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
+        let valid_path = validate_path(&args.path, &self.config_manager, ctx.pwd()).await?;
 
         fs::create_dir_all(&valid_path).await?;
-
-        let mut contents = Vec::new();
 
         // Human summary
         let display_path = display_path_relative_to_git_root(&valid_path, ctx.git_root());
@@ -64,19 +61,13 @@ impl Tool for CreateDirectoryTool {
              󰄴 Status: Directory ready (idempotent)",
             display_path
         );
-        contents.push(Content::text(summary));
 
-        // JSON metadata
-        let metadata = json!({
-            "success": true,
-            "path": valid_path.to_string_lossy(),
-            "created": true
-        });
-        let json_str = serde_json::to_string_pretty(&metadata)
-            .unwrap_or_else(|_| "{}".to_string());
-        contents.push(Content::text(json_str));
-
-        Ok(contents)
+        Ok(ToolResponse::new(summary, FsCreateDirectoryOutput {
+            success: true,
+            path: valid_path.to_string_lossy().to_string(),
+            created: true,
+            message: "Directory created successfully".to_string(),
+        }))
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

@@ -1,37 +1,8 @@
 use crate::ReadFileTool;
 use futures::future;
-use kodegen_mcp_schema::filesystem::{FsReadMultipleFilesArgs, FsReadMultipleFilesPromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
-use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use schemars::JsonSchema;
-use serde::Serialize;
-use serde_json::{Value, json};
-
-// ============================================================================
-// HELPER TYPES
-// ============================================================================
-
-#[derive(Debug, Clone, Serialize, JsonSchema)]
-pub struct MultiFileResult {
-    /// Path to the file
-    pub path: String,
-
-    /// File content (if successful)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
-
-    /// MIME type (if successful)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub mime_type: Option<String>,
-
-    /// Whether file is an image (if successful)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_image: Option<bool>,
-
-    /// Error message (if failed)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
+use kodegen_mcp_schema::filesystem::{FileReadResult, FsReadMultipleFilesArgs, FsReadMultipleFilesOutput, FsReadMultipleFilesPromptArgs};
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
+use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 
 // ============================================================================
 // TOOL STRUCT
@@ -53,14 +24,14 @@ impl ReadMultipleFilesTool {
         }
     }
 
-    /// Read a single file and convert to `MultiFileResult`
+    /// Read a single file and convert to `FileReadResult`
     async fn read_one_file(
         &self,
         path: String,
         offset: i64,
         length: Option<usize>,
         ctx: &ToolExecutionContext,
-    ) -> MultiFileResult {
+    ) -> FileReadResult {
         use kodegen_mcp_schema::filesystem::FsReadFileArgs;
 
         let args = FsReadFileArgs {
@@ -71,58 +42,22 @@ impl ReadMultipleFilesTool {
         };
 
         match self.read_file_tool.execute(args, ctx.clone()).await {
-            Ok(contents) => {
-                // Parse the JSON metadata (second Content item)
-                if contents.len() >= 2
-                    && let Some(json_content) = contents.get(1)
-                    && let rmcp::model::RawContent::Text(text_content) = &json_content.raw
-                    && let Ok(result) = serde_json::from_str::<Value>(&text_content.text)
-                {
-                    return MultiFileResult {
-                        path,
-                        content: result
-                            .get("content")
-                            .and_then(|v| v.as_str())
-                            .map(String::from)
-                            .or_else(|| {
-                                contents.get(1).and_then(|c| {
-                                    if let rmcp::model::RawContent::Text(text_content) = &c.raw {
-                                        Some(text_content.text.clone())
-                                    } else {
-                                        None
-                                    }
-                                })
-                            }),
-                        mime_type: result
-                            .get("mime_type")
-                            .and_then(|v| v.as_str())
-                            .map(String::from),
-                        is_image: result.get("is_image").and_then(serde_json::Value::as_bool),
-                        error: None,
-                    };
-                }
-                
-                // Fallback if parsing fails
-                MultiFileResult {
+            Ok(response) => {
+                // Extract from the typed output
+                FileReadResult {
                     path,
-                    content: contents.get(1).and_then(|c| {
-                        if let rmcp::model::RawContent::Text(text_content) = &c.raw {
-                            Some(text_content.text.clone())
-                        } else {
-                            None
-                        }
-                    }),
-                    mime_type: None,
-                    is_image: None,
+                    success: true,
+                    content: Some(response.metadata.content),
                     error: None,
+                    mime_type: Some(response.metadata.mime_type),
                 }
             }
-            Err(e) => MultiFileResult {
+            Err(e) => FileReadResult {
                 path,
+                success: false,
                 content: None,
-                mime_type: None,
-                is_image: None,
                 error: Some(e.to_string()),
+                mime_type: None,
             },
         }
     }
@@ -155,12 +90,14 @@ impl Tool for ReadMultipleFilesTool {
         false // Only reads local files, not URLs
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
         if args.paths.is_empty() {
             return Err(McpError::InvalidArguments(
                 "No paths provided. Please provide at least one file path.".to_string(),
             ));
         }
+
+        let files_requested = args.paths.len();
 
         // Create futures for all file reads
         let read_futures = args
@@ -169,39 +106,23 @@ impl Tool for ReadMultipleFilesTool {
             .map(|path| self.read_one_file(path, args.offset, args.length, &ctx));
 
         // Execute all reads in parallel
-        let results = future::join_all(read_futures).await;
+        let results: Vec<FileReadResult> = future::join_all(read_futures).await;
 
         // Count successes and failures
-        let total = results.len();
-        let successful = results.iter().filter(|r| r.error.is_none()).count();
-        let failed = total - successful;
+        let files_read = results.iter().filter(|r| r.success).count();
+        let files_failed = files_requested - files_read;
 
-        let mut contents = Vec::new();
-
-        // ========================================
-        // Content[0]: Human-Readable Summary
-        // ========================================
         let summary = format!(
-            "\x1b[36m󰄶 Read multiple files (parallel)\x1b[0m\n 󰗚 Results: {} successful · {} failed of {} total",
-            successful, failed, total
+            "\x1b[36m󰄶 Read multiple files (parallel)\x1b[0m\n 󰗚 Results: {files_read} successful · {files_failed} failed of {files_requested} total"
         );
-        contents.push(Content::text(summary));
 
-        // ========================================
-        // Content[1]: Machine-Parseable JSON
-        // ========================================
-        let metadata = json!({
-            "success": true,
-            "total_files": total,
-            "successful": successful,
-            "failed": failed,
-            "results": results
-        });
-        let json_str = serde_json::to_string_pretty(&metadata)
-            .unwrap_or_else(|_| "{}".to_string());
-        contents.push(Content::text(json_str));
-
-        Ok(contents)
+        Ok(ToolResponse::new(summary, FsReadMultipleFilesOutput {
+            success: true,
+            files_requested,
+            files_read,
+            files_failed,
+            results,
+        }))
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

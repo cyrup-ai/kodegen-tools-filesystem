@@ -6,6 +6,7 @@
 
 use super::super::types::{FileCountData, SearchError, ReturnMode, SearchResult};
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::RwLock;
@@ -53,12 +54,20 @@ pub struct SearchContext {
 
     /// Error message if any
     pub error: Option<String>,
+    
+    /// Client's working directory from ToolExecutionContext
+    /// Used to resolve relative paths in ripgrep integration
+    pub client_pwd: Option<PathBuf>,
 }
 
 impl SearchContext {
-    /// Create a new search context
+    /// Create a new search context with optional client pwd
     #[must_use]
-    pub fn new(max_results: usize, return_only: ReturnMode) -> Self {
+    pub fn new(
+        max_results: usize,
+        return_only: ReturnMode,
+        client_pwd: Option<PathBuf>,
+    ) -> Self {
         Self {
             results: Arc::new(RwLock::new(Vec::new())),
             total_matches: Arc::new(AtomicUsize::new(0)),
@@ -72,6 +81,7 @@ impl SearchContext {
             is_complete: false,
             is_error: false,
             error: None,
+            client_pwd,
         }
     }
 

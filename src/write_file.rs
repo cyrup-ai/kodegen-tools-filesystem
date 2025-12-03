@@ -1,8 +1,7 @@
 use crate::{validate_path, display_path_relative_to_git_root};
-use kodegen_mcp_schema::filesystem::{FsWriteFileArgs, FsWriteFilePromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
-use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::json;
+use kodegen_mcp_schema::filesystem::{FsWriteFileArgs, FsWriteFileOutput, FsWriteFilePromptArgs};
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
+use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use tokio::fs;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
@@ -53,8 +52,8 @@ impl Tool for WriteFileTool {
         false // Each write changes the file
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
-        let valid_path = validate_path(&args.path, &self.config_manager).await?;
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
+        let valid_path = validate_path(&args.path, &self.config_manager, ctx.pwd()).await?;
 
         // Create parent directories if needed
         if let Some(parent) = valid_path.parent() {
@@ -62,13 +61,9 @@ impl Tool for WriteFileTool {
         }
 
         // Get file metadata for response
-        let extension = valid_path
-            .extension()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
         let content_bytes = args.content.len();
         let line_count = args.content.lines().count();
+        let mode = args.mode.clone();
 
         // Perform write operation
         if args.mode == "append" {
@@ -82,16 +77,8 @@ impl Tool for WriteFileTool {
             fs::write(&valid_path, args.content).await?;
         }
 
-        let mut contents = Vec::new();
-
-        // ========================================
-        // Content[0]: Human-Readable Summary
-        // ========================================
-        let verb = if args.mode == "append" {
-            "Appended"
-        } else {
-            "Wrote"
-        };
+        // Human summary
+        let verb = if mode == "append" { "Appended" } else { "Wrote" };
         let display_path = display_path_relative_to_git_root(&valid_path, ctx.git_root());
         let summary = format!(
             "\x1b[32m󰏫 {} file: {}\x1b[0m\n\
@@ -100,26 +87,16 @@ impl Tool for WriteFileTool {
             display_path,
             content_bytes,
             line_count,
-            args.mode
+            mode
         );
-        contents.push(Content::text(summary));
 
-        // ========================================
-        // Content[1]: Machine-Parseable JSON
-        // ========================================
-        let metadata = json!({
-            "success": true,
-            "path": valid_path.to_string_lossy(),
-            "mode": args.mode,
-            "bytes_written": content_bytes,
-            "lines_written": line_count,
-            "file_extension": extension
-        });
-        let json_str = serde_json::to_string_pretty(&metadata)
-            .unwrap_or_else(|_| "{}".to_string());
-        contents.push(Content::text(json_str));
-
-        Ok(contents)
+        Ok(ToolResponse::new(summary, FsWriteFileOutput {
+            success: true,
+            path: valid_path.to_string_lossy().to_string(),
+            bytes_written: content_bytes as u64,
+            lines_written: line_count as u64,
+            mode,
+        }))
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

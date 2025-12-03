@@ -1,8 +1,7 @@
 use crate::{validate_path, display_path_relative_to_git_root};
-use kodegen_mcp_schema::filesystem::{FsGetFileInfoArgs, FsGetFileInfoPromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
-use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::json;
+use kodegen_mcp_schema::filesystem::{FsGetFileInfoArgs, FsGetFileInfoOutput, FsGetFileInfoPromptArgs};
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
+use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use std::time::SystemTime;
 use tokio::fs;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -68,8 +67,8 @@ impl Tool for GetFileInfoTool {
         true
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
-        let valid_path = validate_path(&args.path, &self.config_manager).await?;
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
+        let valid_path = validate_path(&args.path, &self.config_manager, ctx.pwd()).await?;
         let stats = fs::metadata(&valid_path).await?;
 
         let now = SystemTime::now();
@@ -78,73 +77,45 @@ impl Tool for GetFileInfoTool {
             Err(_) => 0,
         };
 
-        let mut info = json!({
-            "path": valid_path.to_string_lossy(),
-            "size": stats.len(),
-            "created": format!("{:?}", stats.created().ok()),
-            "modified_secs_ago": modified_secs_ago,
-            "accessed": format!("{:?}", stats.accessed().ok()),
-            "is_directory": stats.is_dir(),
-            "is_file": stats.is_file(),
-        });
+        // Format timestamps
+        let created = stats.created().ok().map(|t| format!("{t:?}"));
+        let modified = stats.modified().ok().map(|t| format!("{t:?}"));
+        let accessed = stats.accessed().ok().map(|t| format!("{t:?}"));
 
-        // Platform-specific permissions
-        let perms_str;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            perms_str = format!("{:o}", stats.permissions().mode() & 0o777);
-            info["permissions"] = json!(&perms_str);
-        }
-
-        #[cfg(windows)]
-        {
-            perms_str = if stats.permissions().readonly() {
-                "readonly".to_string()
-            } else {
-                "read-write".to_string()
-            };
-            info["readonly"] = json!(stats.permissions().readonly());
-        }
+        // Check for symlink
+        let symlink_meta = fs::symlink_metadata(&valid_path).await?;
+        let is_symlink = symlink_meta.file_type().is_symlink();
 
         // For text files under 10MB, calculate line count using streaming
         let mut line_count_opt = None;
-        if stats.is_file() && stats.len() < 10 * 1024 * 1024 {
-            match count_lines_streaming(&valid_path).await {
-                Ok(line_count) => {
-                    line_count_opt = Some(line_count);
-                    info["line_count"] = json!(line_count);
-                    if line_count > 0 {
-                        info["last_line"] = json!(line_count - 1); // zero-indexed
-                        info["append_position"] = json!(line_count); // for appending
-                    }
-                }
-                Err(_) => {
-                    // Not a text file or encoding error - skip line count silently
-                }
-            }
+        if stats.is_file() && stats.len() < 10 * 1024 * 1024
+            && let Ok(lc) = count_lines_streaming(&valid_path).await {
+            line_count_opt = Some(lc as u64);
         }
 
-        let mut contents = Vec::new();
-
-        // ========================================
-        // Content[0]: Human-Readable Summary
-        // ========================================
-        let type_str = if stats.is_dir() {
-            "Directory"
+        // Platform-specific permissions string for display
+        #[cfg(unix)]
+        let perms_str = {
+            use std::os::unix::fs::PermissionsExt;
+            format!("{:o}", stats.permissions().mode() & 0o777)
+        };
+        #[cfg(windows)]
+        let perms_str = if stats.permissions().readonly() {
+            "readonly".to_string()
         } else {
-            "File"
+            "read-write".to_string()
         };
 
+        // Human summary
+        let type_str = if stats.is_dir() { "Directory" } else { "File" };
         let size_kb = stats.len() as f64 / 1024.0;
         let size_str = if size_kb < 1024.0 {
-            format!("{:.1} KB", size_kb)
+            format!("{size_kb:.1} KB")
         } else {
             format!("{:.1} MB", size_kb / 1024.0)
         };
-
         let time_str = if modified_secs_ago < 60 {
-            format!("{} seconds ago", modified_secs_ago)
+            format!("{modified_secs_ago} seconds ago")
         } else if modified_secs_ago < 3600 {
             format!("{} minutes ago", modified_secs_ago / 60)
         } else if modified_secs_ago < 86400 {
@@ -152,34 +123,26 @@ impl Tool for GetFileInfoTool {
         } else {
             format!("{} days ago", modified_secs_ago / 86400)
         };
-
-        // Line count string (if available)
-        let line_count_str = line_count_opt.map_or(String::new(), |lc| format!("{} lines · ", lc));
-
-        // Build compact two-line format with magenta color on line 1 only
+        let line_count_str = line_count_opt.map_or(String::new(), |lc| format!("{lc} lines · "));
         let display_path = display_path_relative_to_git_root(&valid_path, ctx.git_root());
         let summary = format!(
-            "\x1b[35m󰙅 {} Metadata: {}\x1b[0m\n\
-             󰘖 Details: {} · {}Modified: {} · Perms: {}",
-            type_str,
-            display_path,
-            size_str,
-            line_count_str,
-            time_str,
-            perms_str
+            "\x1b[35m󰙅 {type_str} Metadata: {display_path}\x1b[0m\n\
+             󰘖 Details: {size_str} · {line_count_str}Modified: {time_str} · Perms: {perms_str}"
         );
 
-        contents.push(Content::text(summary));
-
-        // ========================================
-        // Content[1]: Machine-Parseable JSON
-        // ========================================
-        info["success"] = json!(true);
-        let json_str = serde_json::to_string_pretty(&info)
-            .unwrap_or_else(|_| "{}".to_string());
-        contents.push(Content::text(json_str));
-
-        Ok(contents)
+        Ok(ToolResponse::new(summary, FsGetFileInfoOutput {
+            success: true,
+            path: valid_path.to_string_lossy().to_string(),
+            exists: true,
+            is_file: stats.is_file(),
+            is_directory: stats.is_dir(),
+            is_symlink,
+            size_bytes: Some(stats.len()),
+            created,
+            modified,
+            accessed,
+            line_count: line_count_opt,
+        }))
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

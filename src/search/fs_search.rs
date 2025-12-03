@@ -1,6 +1,6 @@
-use kodegen_mcp_schema::filesystem::{FsSearchAction, FsSearchArgs, FsSearchPromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
-use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use kodegen_mcp_schema::filesystem::{FsSearchAction, FsSearchArgs, FsSearchOutput, FsSearchPromptArgs};
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
+use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use std::sync::Arc;
 
 use super::registry::SearchRegistry;
@@ -158,8 +158,11 @@ impl Tool for FsSearchTool {
         &self,
         args: Self::Args,
         ctx: ToolExecutionContext,
-    ) -> Result<Vec<Content>, McpError> {
+    ) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
         let connection_id = ctx.connection_id().unwrap_or("default");
+        
+        // Extract client's pwd from ToolExecutionContext
+        let client_pwd = ctx.pwd().map(|p| p.to_path_buf());
 
         // Dispatch based on action
         let result = match args.action {
@@ -184,7 +187,7 @@ impl Tool for FsSearchTool {
                     .find_or_create_search(connection_id, args.search)
                     .await
                     .map_err(McpError::Other)?;
-                
+
                 session
                     .read_current_state()
                     .await
@@ -199,21 +202,20 @@ impl Tool for FsSearchTool {
                     .map_err(McpError::Other)?;
 
                 session
-                    .execute_search_with_timeout(args.clone(), args.await_completion_ms)
+                    .execute_search_with_timeout(args.clone(), args.await_completion_ms, client_pwd)
                     .await
                     .map_err(McpError::Other)?
             }
         };
 
-        // Return both human-readable summary and JSON
-        let summary = result["output"].as_str().unwrap_or("Search result");
-        let json_str = serde_json::to_string_pretty(&result)
-            .unwrap_or_else(|_| "{}".to_string());
+        // Extract summary from result
+        let summary = result["output"].as_str().unwrap_or("Search result").to_string();
 
-        Ok(vec![
-            Content::text(summary.to_string()),
-            Content::text(json_str),
-        ])
+        // Deserialize JSON result into typed FsSearchOutput
+        let output: FsSearchOutput = serde_json::from_value(result)
+            .map_err(|e| McpError::Other(anyhow::anyhow!("Failed to parse search output: {}", e)))?;
+
+        Ok(ToolResponse::new(summary, output))
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

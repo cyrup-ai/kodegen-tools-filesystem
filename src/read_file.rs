@@ -1,11 +1,12 @@
 use crate::{validate_path, display_path_relative_to_git_root};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use kodegen_mcp_schema::filesystem::{FsReadFileArgs, FsReadFilePromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, error::McpError};
+use kodegen_mcp_schema::filesystem::{FsReadFileArgs, FsReadFileOutput, FsReadFilePromptArgs};
+use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
 use mime_guess::from_path;
-use rmcp::model::{Content, PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{Value, json};
+use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use serde_json::{json, Value};
 use std::collections::VecDeque;
+use std::path::Path;
 use tokio::fs;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::{Duration, timeout};
@@ -121,8 +122,9 @@ impl ReadFileTool {
         path: &str,
         offset: i64,
         length: Option<usize>,
+        client_pwd: Option<&Path>,
     ) -> Result<Value, McpError> {
-        let valid_path = validate_path(path, &self.config_manager).await?;
+        let valid_path = validate_path(path, &self.config_manager, client_pwd).await?;
 
         let guessed = from_path(&valid_path)
             .first_or_octet_stream()
@@ -305,7 +307,7 @@ impl Tool for ReadFileTool {
         true // Can read from URLs
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<Vec<Content>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
         // Auto-detect URL if not specified
         let is_url =
             args.is_url || args.path.starts_with("http://") || args.path.starts_with("https://");
@@ -314,25 +316,19 @@ impl Tool for ReadFileTool {
         let result = if is_url {
             self.read_file_from_url(&args.path).await?
         } else {
-            self.read_file_from_disk(&args.path, args.offset, args.length)
+            self.read_file_from_disk(&args.path, args.offset, args.length, ctx.pwd())
                 .await?
         };
 
         // Extract fields from JSON result
-        let content = result["content"].as_str().unwrap_or("");
-        let mime_type = result["mime_type"].as_str().unwrap_or("unknown");
+        let content = result["content"].as_str().unwrap_or("").to_string();
+        let mime_type = result["mime_type"].as_str().unwrap_or("unknown").to_string();
         let is_image = result["is_image"].as_bool().unwrap_or(false);
         let size_bytes = result["size_bytes"].as_u64();
         let total_lines = result["total_lines"].as_u64();
         let lines_read = result["lines_read"].as_u64();
         let is_partial = result["is_partial"].as_bool().unwrap_or(false);
 
-        let mut contents = Vec::new();
-
-        // ========================================
-        // Content[0]: Human-Readable Summary
-        // ========================================
-        
         // For URLs, display as-is; for file paths, use relative path if in git repo
         let display_path = if is_url {
             args.path.clone()
@@ -344,43 +340,32 @@ impl Tool for ReadFileTool {
         };
         
         let summary = if is_image {
-            // For images: summary describes the image
             let size_kb = size_bytes.map_or(0.0, |b| b as f64 / 1024.0);
             format!(
-                "\x1b[36m󰗚 Read image: {}\x1b[0m\n 󰈙 Format: {} · Size: {:.1} KB",
-                display_path, mime_type, size_kb
+                "\x1b[36m󰗚 Read image: {display_path}\x1b[0m\n 󰈙 Format: {mime_type} · Size: {size_kb:.1} KB"
             )
         } else {
-            // For text files: show summary only, content is in Content[1]
             let read = lines_read.unwrap_or(0);
             format!(
-                "\x1b[36m󰗚 Read file: {}\x1b[0m\n 󰈙 Content: {} lines · {} bytes · Use Content[1] for data",
-                display_path, read, content.len()
+                "\x1b[36m󰗚 Read file: {display_path}\x1b[0m\n 󰈙 Content: {read} lines · {} bytes · Use Content[1] for data",
+                content.len()
             )
         };
-        contents.push(Content::text(summary));
-        contents.push(Content::text(content.to_string()));
 
-        // ========================================
-        // Content[2]: Machine-Parseable JSON
-        // ========================================
-        let metadata = json!({
-            "success": true,
-            "path": args.path,
-            "mime_type": mime_type,
-            "is_image": is_image,
-            "size_bytes": size_bytes,
-            "total_lines": total_lines,
-            "lines_read": lines_read,
-            "is_partial": is_partial,
-            "offset": args.offset,
-            "length": args.length
-        });
-        let json_str = serde_json::to_string_pretty(&metadata)
-            .unwrap_or_else(|_| "{}".to_string());
-        contents.push(Content::text(json_str));
+        // For read_file, display includes the content itself
+        let display = format!("{summary}\n\n{content}");
 
-        Ok(contents)
+        Ok(ToolResponse::new(display, FsReadFileOutput {
+            success: true,
+            path: args.path,
+            mime_type,
+            is_image,
+            size_bytes,
+            total_lines,
+            lines_read,
+            is_partial,
+            content,
+        }))
     }
 
     fn prompt_arguments() -> Vec<PromptArgument> {

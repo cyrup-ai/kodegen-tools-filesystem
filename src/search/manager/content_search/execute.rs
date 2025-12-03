@@ -123,7 +123,8 @@ pub fn execute(
     }
 
     // Build HiArgs ONCE (expensive config processing)
-    let hi_args = match HiArgs::from_low_args(low_args) {
+    // Pass client_pwd from SearchContext for correct working directory resolution
+    let hi_args = match HiArgs::from_low_args(low_args, ctx.client_pwd.as_deref()) {
         Ok(h) => h,
         Err(e) => {
             ctx.error = Some(format!("Failed to build HiArgs: {e}"));

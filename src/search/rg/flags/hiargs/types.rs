@@ -36,10 +36,13 @@ impl State {
     ///
     /// Note that the state values may change throughout the lifetime of
     /// argument parsing.
-    pub fn new() -> anyhow::Result<State> {
+    ///
+    /// Takes optional client pwd from ToolExecutionContext for correct working directory
+    /// resolution in HTTP MCP server scenarios.
+    pub fn new(client_pwd: Option<&Path>) -> anyhow::Result<State> {
         Ok(State {
             stdin_consumed: false,
-            cwd: super::helpers::current_dir()?,
+            cwd: super::helpers::current_dir(client_pwd)?,
         })
     }
 }

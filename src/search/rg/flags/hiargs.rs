@@ -2,7 +2,7 @@
 Provides the definition of high level arguments from CLI flags.
 */
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use bstr::BString;
 
@@ -77,7 +77,13 @@ impl HiArgs {
     ///
     /// This process can fail for a variety of reasons. For example, invalid
     /// globs or some kind of environment issue.
-    pub(crate) fn from_low_args(mut low: LowArgs) -> anyhow::Result<HiArgs> {
+    ///
+    /// Takes optional client_pwd from ToolExecutionContext for correct working directory
+    /// resolution in HTTP MCP server scenarios.
+    pub(crate) fn from_low_args(
+        mut low: LowArgs,
+        client_pwd: Option<&Path>,
+    ) -> anyhow::Result<HiArgs> {
         // We modify the mode in-place on `low` so that subsequent conversions
         // see the correct mode.
         if let Mode::Search(ref mut mode) = low.mode {
@@ -94,7 +100,7 @@ impl HiArgs {
             }
         }
 
-        let mut state = State::new()?;
+        let mut state = State::new(client_pwd)?;
         let patterns = Patterns::from_low_args(&mut state, &mut low)?;
         let paths = Paths::from_low_args(&mut state, &patterns, &mut low)?;
 

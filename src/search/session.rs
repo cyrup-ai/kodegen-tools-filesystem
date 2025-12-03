@@ -86,6 +86,7 @@ impl SearchSession {
         &self,
         args: FsSearchArgs,
         await_completion_ms: u64,
+        client_pwd: Option<PathBuf>,
     ) -> Result<serde_json::Value> {
         let start = std::time::Instant::now();
         
@@ -166,7 +167,7 @@ impl SearchSession {
 
             // Execute search in blocking threadpool
             let result = tokio::task::spawn_blocking(move || {
-                let mut ctx = SearchContext::new(max_results, return_only);
+                let mut ctx = SearchContext::new(max_results, return_only, client_pwd);
                 
                 match search_in {
                     SearchIn::Content => content_search::execute(&options, &root, &mut ctx),

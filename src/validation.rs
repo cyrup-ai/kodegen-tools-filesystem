@@ -145,6 +145,7 @@ fn is_path_allowed(
 pub async fn validate_path(
     requested_path: &str,
     config_manager: &kodegen_config_manager::ConfigManager,
+    client_pwd: Option<&Path>,
 ) -> Result<PathBuf, McpError> {
     // Get timeout from configuration (default: 30 seconds)
     let timeout_ms = config_manager.get_path_validation_timeout_ms();
@@ -160,9 +161,14 @@ pub async fn validate_path(
         let absolute = if Path::new(&expanded_path).is_absolute() {
             PathBuf::from(&expanded_path)
         } else {
-            std::env::current_dir()
-                .map_err(McpError::Io)?
-                .join(&expanded_path)
+            // Use client's pwd if available, fallback to server's pwd
+            let base_dir = if let Some(pwd) = client_pwd {
+                pwd.to_path_buf()
+            } else {
+                // Fallback for non-HTTP clients (direct library usage, tests)
+                std::env::current_dir().map_err(McpError::Io)?
+            };
+            base_dir.join(&expanded_path)
         };
 
         // Check if path is allowed (get detailed error)
