@@ -4,16 +4,26 @@
 //! timeout handling, and state persistence across MCP requests.
 
 use anyhow::Result;
-use kodegen_mcp_schema::filesystem::FsSearchArgs;
+use kodegen_mcp_schema::filesystem::{FsSearchArgs, FsSearchOutput, FsSearchResult, FsSearchResultType};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use serde_json::json;
 
 use super::manager::context::SearchContext;
 use super::manager::{content_search, file_search};
-use super::types::{SearchSessionOptions, SearchIn, CaseMode, BoundaryMode};
+use super::types::{SearchSessionOptions, SearchIn, CaseMode, BoundaryMode, SearchResult, SearchResultType};
+
+/// Internal snapshot data for registry access
+#[derive(Debug, Clone)]
+pub struct SearchStateSnapshot {
+    pub pattern: String,
+    pub path: String,
+    pub match_count: usize,
+    pub files_searched: usize,
+    pub completed: bool,
+    pub duration_ms: u64,
+}
 
 /// Search state snapshot
 #[derive(Debug, Clone)]
@@ -22,20 +32,20 @@ struct SearchState {
     pattern: String,
     path: String,
     search_in: SearchIn,
-    
+
     // Progress
-    results: Vec<serde_json::Value>,
+    results: Vec<SearchResult>,
     match_count: usize,
     files_searched: usize,
     error_count: usize,
     errors: Vec<String>,
-    
+
     // Status
     completed: bool,
     success: bool,
     exit_code: Option<i32>,
     error: Option<String>,
-    
+
     // Timing
     start_time: std::time::Instant,
 }
@@ -60,6 +70,28 @@ impl SearchState {
     }
 }
 
+/// Convert internal SearchResultType to schema FsSearchResultType
+fn convert_result_type(rt: &SearchResultType) -> FsSearchResultType {
+    match rt {
+        SearchResultType::File => FsSearchResultType::File,
+        SearchResultType::Content => FsSearchResultType::Content,
+        SearchResultType::FileList => FsSearchResultType::FileList,
+    }
+}
+
+/// Convert internal SearchResult to schema FsSearchResult
+fn convert_search_result(result: &SearchResult) -> FsSearchResult {
+    FsSearchResult {
+        file: result.file.clone(),
+        line: result.line,
+        r#match: result.r#match.clone(),
+        r#type: convert_result_type(&result.r#type),
+        is_context: result.is_context,
+        is_binary: result.is_binary,
+        binary_suppressed: result.binary_suppressed,
+    }
+}
+
 /// Search session - manages background search with timeout
 pub struct SearchSession {
     search_id: u32,
@@ -81,20 +113,37 @@ impl SearchSession {
         }
     }
 
+    /// Get a snapshot of the current state for the registry
+    pub async fn get_snapshot(&self) -> SearchStateSnapshot {
+        let state = self.state.lock().await;
+        SearchStateSnapshot {
+            pattern: state.pattern.clone(),
+            path: state.path.clone(),
+            match_count: state.match_count,
+            files_searched: state.files_searched,
+            completed: state.completed,
+            duration_ms: state.start_time.elapsed().as_millis() as u64,
+        }
+    }
+
     /// Execute search with timeout support
     pub async fn execute_search_with_timeout(
         &self,
         args: FsSearchArgs,
         await_completion_ms: u64,
         client_pwd: Option<PathBuf>,
-    ) -> Result<serde_json::Value> {
+    ) -> Result<FsSearchOutput> {
         let start = std::time::Instant::now();
-        
+
         // Extract required fields
-        let path = args.path.as_ref()
+        let path = args
+            .path
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("path required for SEARCH action"))?
             .clone();
-        let pattern = args.pattern.as_ref()
+        let pattern = args
+            .pattern
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("pattern required for SEARCH action"))?
             .clone();
 
@@ -109,8 +158,15 @@ impl SearchSession {
         }
 
         // Build search options (reuse existing logic)
-        let case_mode = args.ignore_case
-            .map(|ic| if ic { CaseMode::Insensitive } else { CaseMode::Sensitive })
+        let case_mode = args
+            .ignore_case
+            .map(|ic| {
+                if ic {
+                    CaseMode::Insensitive
+                } else {
+                    CaseMode::Sensitive
+                }
+            })
             .unwrap_or(args.case_mode);
 
         let boundary_mode = if args.word_boundary == Some(true) {
@@ -168,7 +224,7 @@ impl SearchSession {
             // Execute search in blocking threadpool
             let result = tokio::task::spawn_blocking(move || {
                 let mut ctx = SearchContext::new(max_results, return_only, client_pwd);
-                
+
                 match search_in {
                     SearchIn::Content => content_search::execute(&options, &root, &mut ctx),
                     SearchIn::Filenames => file_search::execute(&options, &root, &mut ctx),
@@ -184,19 +240,35 @@ impl SearchSession {
                 let is_error = ctx.is_error;
                 let error = ctx.error.clone();
 
-                (results, errors, total_matches, total_files, error_count, is_complete, is_error, error)
-            }).await;
+                (
+                    results,
+                    errors,
+                    total_matches,
+                    total_files,
+                    error_count,
+                    is_complete,
+                    is_error,
+                    error,
+                )
+            })
+            .await;
 
             // Update state with results
             match result {
-                Ok((results, errors, total_matches, total_files, error_count, is_complete, is_error, error)) => {
+                Ok((
+                    results,
+                    errors,
+                    total_matches,
+                    total_files,
+                    error_count,
+                    is_complete,
+                    is_error,
+                    error,
+                )) => {
                     let mut state = state_clone.lock().await;
-                    
-                    // Convert SearchResult to JSON
-                    state.results = results.iter()
-                        .filter_map(|r| serde_json::to_value(r).ok())
-                        .collect();
-                    
+
+                    // Store results directly
+                    state.results = results;
                     state.match_count = total_matches;
                     state.files_searched = total_files;
                     state.error_count = error_count;
@@ -219,18 +291,24 @@ impl SearchSession {
         // Fire-and-forget mode (await_completion_ms == 0)
         if await_completion_ms == 0 {
             *self.handle.lock().await = Some(search_task);
-            
-            return Ok(json!({
-                "search": self.search_id,
-                "output": "[Background search started]\nUse action=READ to check progress.",
-                "pattern": pattern,
-                "path": path,
-                "match_count": 0,
-                "files_searched": 0,
-                "duration_ms": start.elapsed().as_millis() as u64,
-                "completed": false,
-                "success": true,
-            }));
+
+            return Ok(FsSearchOutput {
+                search: Some(self.search_id),
+                output: "[Background search started]\nUse action=READ to check progress.".to_string(),
+                pattern,
+                path,
+                results: Vec::new(),
+                searches: Vec::new(),
+                match_count: 0,
+                files_searched: 0,
+                error_count: 0,
+                errors: Vec::new(),
+                duration_ms: start.elapsed().as_millis() as u64,
+                completed: false,
+                success: true,
+                exit_code: None,
+                error: None,
+            });
         }
 
         // Wait with timeout
@@ -241,92 +319,114 @@ impl SearchSession {
         let state = self.state.lock().await;
         let duration_ms = start.elapsed().as_millis() as u64;
 
+        // Convert results to schema type
+        let results: Vec<FsSearchResult> = state.results.iter().map(convert_search_result).collect();
+
         match timeout_result {
             Err(_) => {
                 // Timeout - return partial results
-                Ok(json!({
-                    "search": self.search_id,
-                    "output": format!(
+                Ok(FsSearchOutput {
+                    search: Some(self.search_id),
+                    output: format!(
                         "Found {} matches in {} files so far\n\n[Search still running]\n[Use action=READ for more results]",
-                        state.match_count,
-                        state.files_searched
+                        state.match_count, state.files_searched
                     ),
-                    "pattern": &state.pattern,
-                    "path": &state.path,
-                    "results": &state.results,
-                    "match_count": state.match_count,
-                    "files_searched": state.files_searched,
-                    "error_count": state.error_count,
-                    "duration_ms": duration_ms,
-                    "completed": false,
-                    "success": true,
-                }))
+                    pattern: state.pattern.clone(),
+                    path: state.path.clone(),
+                    results,
+                    searches: Vec::new(),
+                    match_count: state.match_count,
+                    files_searched: state.files_searched,
+                    error_count: state.error_count,
+                    errors: Vec::new(),
+                    duration_ms,
+                    completed: false,
+                    success: true,
+                    exit_code: None,
+                    error: None,
+                })
             }
             Ok(Ok(_)) => {
                 // Completed successfully
-                Ok(json!({
-                    "search": self.search_id,
-                    "output": format!(
+                Ok(FsSearchOutput {
+                    search: Some(self.search_id),
+                    output: format!(
                         "Search completed: {} matches in {} files",
-                        state.match_count,
-                        state.files_searched
+                        state.match_count, state.files_searched
                     ),
-                    "pattern": &state.pattern,
-                    "path": &state.path,
-                    "results": &state.results,
-                    "match_count": state.match_count,
-                    "files_searched": state.files_searched,
-                    "error_count": state.error_count,
-                    "errors": &state.errors,
-                    "duration_ms": duration_ms,
-                    "completed": true,
-                    "success": state.success,
-                    "exit_code": state.exit_code,
-                    "error": &state.error,
-                }))
+                    pattern: state.pattern.clone(),
+                    path: state.path.clone(),
+                    results,
+                    searches: Vec::new(),
+                    match_count: state.match_count,
+                    files_searched: state.files_searched,
+                    error_count: state.error_count,
+                    errors: state.errors.clone(),
+                    duration_ms,
+                    completed: true,
+                    success: state.success,
+                    exit_code: state.exit_code,
+                    error: state.error.clone(),
+                })
             }
             Ok(Err(e)) => {
                 // Task panicked
-                Ok(json!({
-                    "search": self.search_id,
-                    "output": format!("Search failed: {}", e),
-                    "pattern": &state.pattern,
-                    "path": &state.path,
-                    "duration_ms": duration_ms,
-                    "completed": true,
-                    "success": false,
-                    "exit_code": 1,
-                    "error": format!("{}", e),
-                }))
+                Ok(FsSearchOutput {
+                    search: Some(self.search_id),
+                    output: format!("Search failed: {}", e),
+                    pattern: state.pattern.clone(),
+                    path: state.path.clone(),
+                    results: Vec::new(),
+                    searches: Vec::new(),
+                    match_count: 0,
+                    files_searched: 0,
+                    error_count: 1,
+                    errors: Vec::new(),
+                    duration_ms,
+                    completed: true,
+                    success: false,
+                    exit_code: Some(1),
+                    error: Some(format!("{}", e)),
+                })
             }
         }
     }
 
     /// Read current search state without re-executing
-    pub async fn read_current_state(&self) -> Result<serde_json::Value> {
+    pub async fn read_current_state(&self) -> Result<FsSearchOutput> {
         let state = self.state.lock().await;
         let duration_ms = state.start_time.elapsed().as_millis() as u64;
 
-        Ok(json!({
-            "search": self.search_id,
-            "output": if state.completed {
-                format!("Search completed: {} matches in {} files", state.match_count, state.files_searched)
+        // Convert results to schema type
+        let results: Vec<FsSearchResult> = state.results.iter().map(convert_search_result).collect();
+
+        Ok(FsSearchOutput {
+            search: Some(self.search_id),
+            output: if state.completed {
+                format!(
+                    "Search completed: {} matches in {} files",
+                    state.match_count, state.files_searched
+                )
             } else {
-                format!("Search in progress: {} matches in {} files so far", state.match_count, state.files_searched)
+                format!(
+                    "Search in progress: {} matches in {} files so far",
+                    state.match_count, state.files_searched
+                )
             },
-            "pattern": &state.pattern,
-            "path": &state.path,
-            "results": &state.results,
-            "match_count": state.match_count,
-            "files_searched": state.files_searched,
-            "error_count": state.error_count,
-            "errors": &state.errors,
-            "duration_ms": duration_ms,
-            "completed": state.completed,
-            "success": state.success,
-            "exit_code": state.exit_code,
-            "error": &state.error,
-        }))
+            pattern: state.pattern.clone(),
+            path: state.path.clone(),
+            results,
+            searches: Vec::new(),
+            match_count: state.match_count,
+            files_searched: state.files_searched,
+            error_count: state.error_count,
+            errors: state.errors.clone(),
+            duration_ms,
+            completed: state.completed,
+            success: state.success,
+            exit_code: state.exit_code,
+            error: state.error.clone(),
+        })
     }
 
     /// Cancel the search
@@ -334,12 +434,12 @@ impl SearchSession {
         if let Some(handle) = self.handle.lock().await.as_ref() {
             handle.abort();
         }
-        
+
         let mut state = self.state.lock().await;
         state.completed = true;
         state.success = false;
         state.exit_code = Some(130); // SIGINT
-        
+
         Ok(())
     }
 }

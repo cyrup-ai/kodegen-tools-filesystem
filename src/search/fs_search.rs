@@ -160,12 +160,12 @@ impl Tool for FsSearchTool {
         ctx: ToolExecutionContext,
     ) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
         let connection_id = ctx.connection_id().unwrap_or("default");
-        
+
         // Extract client's pwd from ToolExecutionContext
         let client_pwd = ctx.pwd().map(|p| p.to_path_buf());
 
-        // Dispatch based on action
-        let result = match args.action {
+        // Dispatch based on action - all paths return typed FsSearchOutput
+        let output: FsSearchOutput = match args.action {
             FsSearchAction::List => {
                 // List all active searches with their current states
                 self.registry
@@ -188,10 +188,7 @@ impl Tool for FsSearchTool {
                     .await
                     .map_err(McpError::Other)?;
 
-                session
-                    .read_current_state()
-                    .await
-                    .map_err(McpError::Other)?
+                session.read_current_state().await.map_err(McpError::Other)?
             }
             FsSearchAction::Search => {
                 // Execute search with timeout support
@@ -208,12 +205,8 @@ impl Tool for FsSearchTool {
             }
         };
 
-        // Extract summary from result
-        let summary = result["output"].as_str().unwrap_or("Search result").to_string();
-
-        // Deserialize JSON result into typed FsSearchOutput
-        let output: FsSearchOutput = serde_json::from_value(result)
-            .map_err(|e| McpError::Other(anyhow::anyhow!("Failed to parse search output: {}", e)))?;
+        // Extract summary from typed output
+        let summary = output.output.clone();
 
         Ok(ToolResponse::new(summary, output))
     }

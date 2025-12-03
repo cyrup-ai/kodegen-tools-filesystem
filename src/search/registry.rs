@@ -4,10 +4,10 @@
 //! Each connection has its own isolated set of search instances.
 
 use anyhow::{anyhow, Result};
+use kodegen_mcp_schema::filesystem::{FsSearchOutput, FsSearchSnapshot};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use serde_json::json;
 
 use super::session::SearchSession;
 
@@ -46,37 +46,48 @@ impl SearchRegistry {
     }
 
     /// List all active searches for a connection with their current states
-    pub async fn list_all_searches(&self, connection_id: &str) -> Result<serde_json::Value> {
+    pub async fn list_all_searches(&self, connection_id: &str) -> Result<FsSearchOutput> {
         let start = std::time::Instant::now();
         let searches = self.searches.lock().await;
         let mut snapshots = Vec::new();
 
         for ((conn_id, search_id), session) in searches.iter() {
             if conn_id == connection_id {
-                let state = session.read_current_state().await?;
-                snapshots.push(json!({
-                    "search": search_id,
-                    "pattern": state["pattern"],
-                    "path": state["path"],
-                    "match_count": state["match_count"],
-                    "files_searched": state["files_searched"],
-                    "completed": state["completed"],
-                    "duration_ms": state["duration_ms"],
-                }));
+                let state = session.get_snapshot().await;
+                snapshots.push(FsSearchSnapshot {
+                    search: *search_id,
+                    pattern: if state.pattern.is_empty() { None } else { Some(state.pattern) },
+                    path: if state.path.is_empty() { None } else { Some(state.path) },
+                    match_count: state.match_count,
+                    files_searched: state.files_searched,
+                    completed: state.completed,
+                    duration_ms: Some(state.duration_ms),
+                });
             }
         }
 
         // Sort by search ID
-        snapshots.sort_by_key(|v| v["search"].as_u64().unwrap_or(0));
+        snapshots.sort_by_key(|s| s.search);
 
-        Ok(json!({
-            "search": serde_json::Value::Null, // None indicates LIST response with multiple searches
-            "output": serde_json::to_string_pretty(&snapshots)?,
-            "searches": snapshots,
-            "completed": true,
-            "success": true,
-            "duration_ms": start.elapsed().as_millis() as u64,
-        }))
+        let output = serde_json::to_string_pretty(&snapshots)?;
+
+        Ok(FsSearchOutput {
+            search: None, // None indicates LIST response with multiple searches
+            output,
+            pattern: String::new(),
+            path: String::new(),
+            results: Vec::new(),
+            searches: snapshots,
+            match_count: 0,
+            files_searched: 0,
+            error_count: 0,
+            errors: Vec::new(),
+            duration_ms: start.elapsed().as_millis() as u64,
+            completed: true,
+            success: true,
+            exit_code: None,
+            error: None,
+        })
     }
 
     /// Kill a search and cleanup all resources
@@ -84,22 +95,31 @@ impl SearchRegistry {
         &self,
         connection_id: &str,
         search_id: u32,
-    ) -> Result<serde_json::Value> {
+    ) -> Result<FsSearchOutput> {
         let start = std::time::Instant::now();
         let key = (connection_id.to_string(), search_id);
         let mut searches = self.searches.lock().await;
 
         if let Some(session) = searches.remove(&key) {
             session.cancel().await?;
-            
-            Ok(json!({
-                "search": search_id,
-                "output": format!("Search {} cancelled and resources cleaned up", search_id),
-                "completed": true,
-                "success": true,
-                "exit_code": 130, // SIGINT exit code
-                "duration_ms": start.elapsed().as_millis() as u64,
-            }))
+
+            Ok(FsSearchOutput {
+                search: Some(search_id),
+                output: format!("Search {} cancelled and resources cleaned up", search_id),
+                pattern: String::new(),
+                path: String::new(),
+                results: Vec::new(),
+                searches: Vec::new(),
+                match_count: 0,
+                files_searched: 0,
+                error_count: 0,
+                errors: Vec::new(),
+                duration_ms: start.elapsed().as_millis() as u64,
+                completed: true,
+                success: true,
+                exit_code: Some(130), // SIGINT exit code
+                error: None,
+            })
         } else {
             Err(anyhow!(
                 "Search {} not found for connection {}",
@@ -117,7 +137,7 @@ impl SearchRegistry {
             .filter(|(conn_id, _)| conn_id == connection_id)
             .cloned()
             .collect();
-        
+
         let count = to_remove.len();
         for key in to_remove {
             if let Some(session) = searches.remove(&key) {

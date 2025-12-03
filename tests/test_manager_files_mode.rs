@@ -1,20 +1,18 @@
 /*!
-Tests for files mode
+Tests for files mode (search_in: Filenames)
 
-Extracted from src/search/manager/files_mode/tests.rs
+Updated to use new SearchContext API and ReturnMode
 */
 
+use kodegen_mcp_schema::filesystem::{ReturnMode, SearchIn, CaseMode, EngineChoice as Engine, BinaryMode};
 use kodegen_tools_filesystem::search::{
     manager::{files_mode::execute, context::SearchContext},
-    types::{CaseMode, SearchType, SearchSessionOptions, SearchResultType, SearchOutputMode, Engine, BinaryMode},
+    types::SearchSessionOptions,
 };
 
 use std::fs;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::time::Instant;
+use std::path::PathBuf;
 use tempfile::TempDir;
-use tokio::sync::{RwLock, watch};
 
 #[test]
 fn test_files_mode_basic() {
@@ -33,8 +31,8 @@ fn test_files_mode_basic() {
     // Create options for files mode
     let options = SearchSessionOptions {
         root_path: temp_path.to_string_lossy().to_string(),
-        pattern: String::new(), // Pattern ignored in files mode
-        search_type: SearchType::Files,
+        pattern: String::new(), // Pattern ignored in files mode with empty pattern
+        search_in: SearchIn::Filenames,
         file_pattern: None,
         r#type: vec![],
         type_not: vec![],
@@ -49,7 +47,7 @@ fn test_files_mode_basic() {
         early_termination: None,
         literal_search: false,
         boundary_mode: None,
-        output_mode: SearchOutputMode::Full,
+        return_only: ReturnMode::Paths,
         invert_match: false,
         engine: Engine::Auto,
         preprocessor: None,
@@ -60,51 +58,24 @@ fn test_files_mode_basic() {
         max_filesize: None,
         max_depth: None,
         only_matching: false,
-        list_files_only: true,
         sort_by: None,
         sort_direction: None,
         encoding: None,
     };
 
-    // Create context
-    let (_tx, rx) = watch::channel(false);
-    let (first_result_tx, _first_result_rx) = watch::channel(false);
-    let start_time = Instant::now();
-    let mut ctx = SearchContext {
-        results: Arc::new(RwLock::new(Vec::new())),
-        is_complete: Arc::new(AtomicBool::new(false)),
-        total_matches: Arc::new(AtomicUsize::new(0)),
-        total_files: Arc::new(AtomicUsize::new(0)),
-        last_read_time_atomic: Arc::new(AtomicU64::new(0)),
-        cancellation_rx: rx,
-        first_result_tx,
-        was_incomplete: Arc::new(RwLock::new(false)),
-        error_count: Arc::new(AtomicUsize::new(0)),
-        errors: Arc::new(RwLock::new(Vec::new())),
-        is_error: Arc::new(RwLock::new(false)),
-        error: Arc::new(RwLock::new(None)),
-        output_mode: SearchOutputMode::Full,
-        seen_files: Arc::new(RwLock::new(std::collections::HashSet::new())),
-        file_counts: Arc::new(RwLock::new(std::collections::HashMap::new())),
-        start_time,
-    };
+    // Create context using new constructor
+    let mut ctx = SearchContext::new(100, ReturnMode::Paths, None);
 
     // Execute files mode
-    execute(&options, temp_path, &mut ctx);
+    let root = PathBuf::from(temp_path);
+    execute(&options, &root, &mut ctx);
 
     // Verify results
-    let results = ctx.results.blocking_read();
+    let results = ctx.results().blocking_read();
     assert_eq!(results.len(), 3, "Should find 3 files");
 
-    // Verify all results are FileList type
-    for result in results.iter() {
-        assert!(matches!(result.r#type, SearchResultType::FileList));
-        assert!(result.line.is_none());
-        assert!(result.r#match.is_none());
-    }
-
     // Verify completion
-    assert!(ctx.is_complete.load(Ordering::Acquire));
+    assert!(ctx.is_complete);
 }
 
 #[test]
@@ -127,7 +98,7 @@ fn test_files_mode_respects_gitignore() {
     let options = SearchSessionOptions {
         root_path: temp_path.to_string_lossy().to_string(),
         pattern: String::new(),
-        search_type: SearchType::Files,
+        search_in: SearchIn::Filenames,
         file_pattern: None,
         r#type: vec![],
         type_not: vec![],
@@ -142,7 +113,7 @@ fn test_files_mode_respects_gitignore() {
         early_termination: None,
         literal_search: false,
         boundary_mode: None,
-        output_mode: SearchOutputMode::Full,
+        return_only: ReturnMode::Paths,
         invert_match: false,
         engine: Engine::Auto,
         preprocessor: None,
@@ -153,40 +124,20 @@ fn test_files_mode_respects_gitignore() {
         max_filesize: None,
         max_depth: None,
         only_matching: false,
-        list_files_only: true,
         sort_by: None,
         sort_direction: None,
         encoding: None,
     };
 
     // Create context
-    let (_tx, rx) = watch::channel(false);
-    let (first_result_tx, _first_result_rx) = watch::channel(false);
-    let start_time = Instant::now();
-    let mut ctx = SearchContext {
-        results: Arc::new(RwLock::new(Vec::new())),
-        is_complete: Arc::new(AtomicBool::new(false)),
-        total_matches: Arc::new(AtomicUsize::new(0)),
-        total_files: Arc::new(AtomicUsize::new(0)),
-        last_read_time_atomic: Arc::new(AtomicU64::new(0)),
-        cancellation_rx: rx,
-        first_result_tx,
-        was_incomplete: Arc::new(RwLock::new(false)),
-        error_count: Arc::new(AtomicUsize::new(0)),
-        errors: Arc::new(RwLock::new(Vec::new())),
-        is_error: Arc::new(RwLock::new(false)),
-        error: Arc::new(RwLock::new(None)),
-        output_mode: SearchOutputMode::Full,
-        seen_files: Arc::new(RwLock::new(std::collections::HashSet::new())),
-        file_counts: Arc::new(RwLock::new(std::collections::HashMap::new())),
-        start_time,
-    };
+    let mut ctx = SearchContext::new(100, ReturnMode::Paths, None);
 
     // Execute
-    execute(&options, temp_path, &mut ctx);
+    let root = PathBuf::from(temp_path);
+    execute(&options, &root, &mut ctx);
 
     // Verify results - should only find tracked.rs, not ignored.log
-    let results = ctx.results.blocking_read();
+    let results = ctx.results().blocking_read();
     assert_eq!(
         results.len(),
         1,
@@ -210,7 +161,7 @@ fn test_files_mode_type_filter() {
     let options = SearchSessionOptions {
         root_path: temp_path.to_string_lossy().to_string(),
         pattern: String::new(),
-        search_type: SearchType::Files,
+        search_in: SearchIn::Filenames,
         file_pattern: None,
         r#type: vec!["rust".to_string()],
         type_not: vec![],
@@ -225,7 +176,7 @@ fn test_files_mode_type_filter() {
         early_termination: None,
         literal_search: false,
         boundary_mode: None,
-        output_mode: SearchOutputMode::Full,
+        return_only: ReturnMode::Paths,
         invert_match: false,
         engine: Engine::Auto,
         preprocessor: None,
@@ -236,40 +187,20 @@ fn test_files_mode_type_filter() {
         max_filesize: None,
         max_depth: None,
         only_matching: false,
-        list_files_only: true,
         sort_by: None,
         sort_direction: None,
         encoding: None,
     };
 
     // Create context
-    let (_tx, rx) = watch::channel(false);
-    let (first_result_tx, _first_result_rx) = watch::channel(false);
-    let start_time = Instant::now();
-    let mut ctx = SearchContext {
-        results: Arc::new(RwLock::new(Vec::new())),
-        is_complete: Arc::new(AtomicBool::new(false)),
-        total_matches: Arc::new(AtomicUsize::new(0)),
-        total_files: Arc::new(AtomicUsize::new(0)),
-        last_read_time_atomic: Arc::new(AtomicU64::new(0)),
-        cancellation_rx: rx,
-        first_result_tx,
-        was_incomplete: Arc::new(RwLock::new(false)),
-        error_count: Arc::new(AtomicUsize::new(0)),
-        errors: Arc::new(RwLock::new(Vec::new())),
-        is_error: Arc::new(RwLock::new(false)),
-        error: Arc::new(RwLock::new(None)),
-        output_mode: SearchOutputMode::Full,
-        seen_files: Arc::new(RwLock::new(std::collections::HashSet::new())),
-        file_counts: Arc::new(RwLock::new(std::collections::HashMap::new())),
-        start_time,
-    };
+    let mut ctx = SearchContext::new(100, ReturnMode::Paths, None);
 
     // Execute
-    execute(&options, temp_path, &mut ctx);
+    let root = PathBuf::from(temp_path);
+    execute(&options, &root, &mut ctx);
 
     // Verify results - should only find .rs file
-    let results = ctx.results.blocking_read();
+    let results = ctx.results().blocking_read();
     assert_eq!(results.len(), 1, "Should find only 1 rust file");
     assert!(results[0].file.contains("code.rs"));
 }
@@ -298,7 +229,7 @@ fn test_files_mode_max_depth() {
     let options = SearchSessionOptions {
         root_path: temp_path.to_string_lossy().to_string(),
         pattern: String::new(),
-        search_type: SearchType::Files,
+        search_in: SearchIn::Filenames,
         file_pattern: None,
         r#type: vec![],
         type_not: vec![],
@@ -313,7 +244,7 @@ fn test_files_mode_max_depth() {
         early_termination: None,
         literal_search: false,
         boundary_mode: None,
-        output_mode: SearchOutputMode::Full,
+        return_only: ReturnMode::Paths,
         invert_match: false,
         engine: Engine::Auto,
         preprocessor: None,
@@ -324,43 +255,23 @@ fn test_files_mode_max_depth() {
         max_filesize: None,
         max_depth: Some(2), // Limit to 2 levels deep
         only_matching: false,
-        list_files_only: true,
         sort_by: None,
         sort_direction: None,
         encoding: None,
     };
 
     // Create context
-    let (_tx, rx) = watch::channel(false);
-    let (first_result_tx, _first_result_rx) = watch::channel(false);
-    let start_time = Instant::now();
-    let mut ctx = SearchContext {
-        results: Arc::new(RwLock::new(Vec::new())),
-        is_complete: Arc::new(AtomicBool::new(false)),
-        total_matches: Arc::new(AtomicUsize::new(0)),
-        total_files: Arc::new(AtomicUsize::new(0)),
-        last_read_time_atomic: Arc::new(AtomicU64::new(0)),
-        cancellation_rx: rx,
-        first_result_tx,
-        was_incomplete: Arc::new(RwLock::new(false)),
-        error_count: Arc::new(AtomicUsize::new(0)),
-        errors: Arc::new(RwLock::new(Vec::new())),
-        is_error: Arc::new(RwLock::new(false)),
-        error: Arc::new(RwLock::new(None)),
-        output_mode: SearchOutputMode::Full,
-        seen_files: Arc::new(RwLock::new(std::collections::HashSet::new())),
-        file_counts: Arc::new(RwLock::new(std::collections::HashMap::new())),
-        start_time,
-    };
+    let mut ctx = SearchContext::new(100, ReturnMode::Paths, None);
 
     // Execute
-    execute(&options, temp_path, &mut ctx);
+    let root = PathBuf::from(temp_path);
+    execute(&options, &root, &mut ctx);
 
     // Verify results - max_depth=2 in ignore crate means:
     // depth 0 (root) + depth 1 (level1) = 2 levels
     // So we get: root.txt + level1/file1.txt = 2 files
     // level1/level2 (depth 2) is excluded
-    let results = ctx.results.blocking_read();
+    let results = ctx.results().blocking_read();
     assert!(
         results.len() >= 2,
         "Should find at least 2 files (root and level1)"

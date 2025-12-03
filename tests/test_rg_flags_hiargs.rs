@@ -18,7 +18,7 @@ fn test_binary_mode_auto_maps_to_rg_auto() {
         ..Default::default()
     };
 
-    let state = State::new().expect("Failed to create state");
+    let state = State::new(None).expect("Failed to create state");
     let detection = BinaryDetection::from_low_args(&state, &low);
 
     // For Auto mode:
@@ -46,7 +46,7 @@ fn test_binary_mode_binary_maps_to_search_and_suppress() {
         ..Default::default()
     };
 
-    let state = State::new().expect("Failed to create state");
+    let state = State::new(None).expect("Failed to create state");
     let detection = BinaryDetection::from_low_args(&state, &low);
 
     // For SearchAndSuppress mode:
@@ -72,7 +72,7 @@ fn test_binary_mode_text_maps_to_as_text() {
         ..Default::default()
     };
 
-    let state = State::new().expect("Failed to create state");
+    let state = State::new(None).expect("Failed to create state");
     let detection = BinaryDetection::from_low_args(&state, &low);
 
     // For AsText mode:
