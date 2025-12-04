@@ -23,6 +23,7 @@ pub(super) struct FileSearchVisitor {
     pub(super) early_term_triggered: Arc<AtomicBool>,
     pub(super) results: Arc<RwLock<Vec<SearchResult>>>,
     pub(super) total_matches: Arc<AtomicUsize>,
+    pub(super) total_files: Arc<AtomicUsize>,
     pub(super) error_count: Arc<AtomicUsize>,
     pub(super) errors: Arc<RwLock<Vec<SearchError>>>,
     /// Thread-local buffer for batching results

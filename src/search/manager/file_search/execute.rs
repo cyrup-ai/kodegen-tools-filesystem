@@ -96,6 +96,7 @@ pub fn execute(
         early_term_triggered: Arc::new(AtomicBool::new(false)),
         results: Arc::clone(&ctx.results),
         total_matches: Arc::clone(&ctx.total_matches),
+        total_files: Arc::clone(&ctx.total_files),
         error_count: Arc::clone(&ctx.error_count),
         errors: Arc::clone(&ctx.errors),
     };

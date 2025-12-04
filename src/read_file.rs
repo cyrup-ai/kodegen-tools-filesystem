@@ -4,12 +4,44 @@ use kodegen_mcp_schema::filesystem::{FsReadFileArgs, FsReadFileOutput, FsReadFil
 use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
 use mime_guess::from_path;
 use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
-use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::path::Path;
 use tokio::fs;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::{Duration, timeout};
+
+// ============================================================================
+// INTERNAL TYPES
+// ============================================================================
+
+/// Internal file read result (before conversion to MCP output)
+/// 
+/// This struct mirrors FsReadFileOutput but excludes fields that are
+/// added by execute() (success, path). All internal methods return this
+/// instead of serde_json::Value for compile-time type safety.
+#[derive(Debug, Clone)]
+struct InternalReadResult {
+    /// File content (text or base64-encoded binary)
+    content: String,
+    
+    /// MIME type detected from file extension or HTTP headers
+    mime_type: String,
+    
+    /// Whether this is an image file (determines base64 encoding)
+    is_image: bool,
+    
+    /// Size in bytes (Some for images/URLs, None for text files from disk)
+    size_bytes: Option<u64>,
+    
+    /// Total lines in file (Some for text files from disk, None for images/URLs)
+    total_lines: Option<u64>,
+    
+    /// Number of lines actually read (Some for text files from disk, None for images/URLs)
+    lines_read: Option<u64>,
+    
+    /// Whether this is a partial read (offset != 0 or didn't read to EOF)
+    is_partial: bool,
+}
 
 // ============================================================================
 // HELPERS
@@ -123,7 +155,7 @@ impl ReadFileTool {
         offset: i64,
         length: Option<usize>,
         client_pwd: Option<&Path>,
-    ) -> Result<Value, McpError> {
+    ) -> Result<InternalReadResult, McpError> {
         let valid_path = validate_path(path, &self.config_manager, client_pwd).await?;
 
         let guessed = from_path(&valid_path)
@@ -138,12 +170,15 @@ impl ReadFileTool {
             let bytes = fs::read(&valid_path).await?;
             let base64_content = BASE64.encode(&bytes);
 
-            return Ok(json!({
-                "content": base64_content,
-                "mime_type": guessed,
-                "is_image": true,
-                "size_bytes": bytes.len()
-            }));
+            return Ok(InternalReadResult {
+                content: base64_content,
+                mime_type: guessed,
+                is_image: true,
+                size_bytes: Some(bytes.len() as u64),
+                total_lines: None,
+                lines_read: None,
+                is_partial: false,
+            });
         }
 
         // Handle text files - use streaming to avoid loading entire file
@@ -213,18 +248,19 @@ impl ReadFileTool {
             content = format!("{notice}{content}");
         }
 
-        Ok(json!({
-            "content": content,
-            "mime_type": guessed,
-            "is_image": false,
-            "total_lines": total,
-            "lines_read": end - start,
-            "is_partial": is_partial
-        }))
+        Ok(InternalReadResult {
+            content,
+            mime_type: guessed,
+            is_image: false,
+            size_bytes: None,
+            total_lines: total.map(|t| t as u64),
+            lines_read: Some((end - start) as u64),
+            is_partial,
+        })
     }
 
     /// Read file from URL with timeout
-    async fn read_file_from_url(&self, url: &str) -> Result<Value, McpError> {
+    async fn read_file_from_url(&self, url: &str) -> Result<InternalReadResult, McpError> {
         const FETCH_TIMEOUT_MS: u64 = 30000;
 
         let fetch_operation = async {
@@ -254,20 +290,26 @@ impl ReadFileTool {
 
             if is_image {
                 let base64_content = BASE64.encode(&bytes);
-                Ok(json!({
-                    "content": base64_content,
-                    "mime_type": content_type,
-                    "is_image": true,
-                    "size_bytes": bytes.len()
-                }))
+                Ok(InternalReadResult {
+                    content: base64_content,
+                    mime_type: content_type,
+                    is_image: true,
+                    size_bytes: Some(bytes.len() as u64),
+                    total_lines: None,
+                    lines_read: None,
+                    is_partial: false,
+                })
             } else {
                 let content = String::from_utf8_lossy(&bytes).to_string();
-                Ok(json!({
-                    "content": content,
-                    "mime_type": content_type,
-                    "is_image": false,
-                    "size_bytes": bytes.len()
-                }))
+                Ok(InternalReadResult {
+                    content,
+                    mime_type: content_type,
+                    is_image: false,
+                    size_bytes: Some(bytes.len() as u64),
+                    total_lines: None,
+                    lines_read: None,
+                    is_partial: false,
+                })
             }
         };
 
@@ -320,14 +362,14 @@ impl Tool for ReadFileTool {
                 .await?
         };
 
-        // Extract fields from JSON result
-        let content = result["content"].as_str().unwrap_or("").to_string();
-        let mime_type = result["mime_type"].as_str().unwrap_or("unknown").to_string();
-        let is_image = result["is_image"].as_bool().unwrap_or(false);
-        let size_bytes = result["size_bytes"].as_u64();
-        let total_lines = result["total_lines"].as_u64();
-        let lines_read = result["lines_read"].as_u64();
-        let is_partial = result["is_partial"].as_bool().unwrap_or(false);
+        // Direct struct field access - compile-time guaranteed
+        let content = result.content;
+        let mime_type = result.mime_type;
+        let is_image = result.is_image;
+        let size_bytes = result.size_bytes;
+        let total_lines = result.total_lines;
+        let lines_read = result.lines_read;
+        let is_partial = result.is_partial;
 
         // For URLs, display as-is; for file paths, use relative path if in git repo
         let display_path = if is_url {

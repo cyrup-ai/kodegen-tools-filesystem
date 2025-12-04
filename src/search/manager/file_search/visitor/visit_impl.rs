@@ -84,6 +84,9 @@ impl ParallelVisitor for FileSearchVisitor {
                             }
                         }) {
                         Ok(_) => {
+                            // Increment total_files for file search (each match IS a file)
+                            self.total_files.fetch_add(1, Ordering::SeqCst);
+
                             // Collect metadata
                             let entry_metadata = entry.metadata().ok();
                             let modified = entry_metadata.as_ref().and_then(|m| m.modified().ok());
@@ -133,6 +136,9 @@ impl ParallelVisitor for FileSearchVisitor {
                     }
                 }) {
                 Ok(_) => {
+                    // Increment total_files for file search (each match IS a file)
+                    self.total_files.fetch_add(1, Ordering::SeqCst);
+
                     // Collect metadata and add result (same as before)
                     let entry_metadata = entry.metadata().ok();
                     let modified = entry_metadata.as_ref().and_then(|m| m.modified().ok());

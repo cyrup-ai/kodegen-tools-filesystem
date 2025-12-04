@@ -77,6 +77,22 @@ impl ParallelVisitor for ContentSearchVisitor {
                             result.created = created;
                         }
 
+                        // Track unique files for total_files counter (all modes need this)
+                        // Check if this is the first time seeing this file
+                        let mut first_result_from_file = false;
+                        if !results.is_empty() {
+                            let mut seen = self.seen_files.blocking_write();
+                            if !seen.contains(&results[0].file) {
+                                seen.insert(results[0].file.clone());
+                                first_result_from_file = true;
+                            }
+                        }
+
+                        // If first result from this file, increment total_files (for Matches mode)
+                        if first_result_from_file && self.return_only == ReturnMode::Matches {
+                            self.total_files.fetch_add(1, Ordering::SeqCst);
+                        }
+
                         for result in results.into_iter() {
                             // Mode-first branching: check return mode BEFORE reservation
                             match self.return_only {

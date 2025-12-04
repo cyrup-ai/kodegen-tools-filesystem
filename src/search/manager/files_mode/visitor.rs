@@ -14,6 +14,7 @@ pub(super) struct FilesListerVisitor {
     pub(super) max_results: usize,
     pub(super) results: Arc<RwLock<Vec<SearchResult>>>,
     pub(super) total_matches: Arc<AtomicUsize>,
+    pub(super) total_files: Arc<AtomicUsize>,
     pub(super) error_count: Arc<AtomicUsize>,
     pub(super) errors: Arc<RwLock<Vec<SearchError>>>,
     /// Thread-local buffer for batching results
@@ -83,6 +84,7 @@ impl ParallelVisitor for FilesListerVisitor {
                 {
                     self.add_file(&entry);
                     self.total_matches.fetch_add(1, Ordering::Relaxed);
+                    self.total_files.fetch_add(1, Ordering::Relaxed);
                 }
                 ignore::WalkState::Continue
             }

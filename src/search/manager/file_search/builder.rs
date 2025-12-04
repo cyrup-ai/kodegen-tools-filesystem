@@ -21,6 +21,7 @@ pub(super) struct FileSearchBuilder {
     pub(super) early_term_triggered: Arc<AtomicBool>,
     pub(super) results: Arc<RwLock<Vec<SearchResult>>>,
     pub(super) total_matches: Arc<AtomicUsize>,
+    pub(super) total_files: Arc<AtomicUsize>,
     pub(super) error_count: Arc<AtomicUsize>,
     pub(super) errors: Arc<RwLock<Vec<crate::search::types::SearchError>>>,
 }
@@ -39,6 +40,7 @@ impl<'s> ParallelVisitorBuilder<'s> for FileSearchBuilder {
             early_term_triggered: Arc::clone(&self.early_term_triggered),
             results: Arc::clone(&self.results),
             total_matches: Arc::clone(&self.total_matches),
+            total_files: Arc::clone(&self.total_files),
             error_count: Arc::clone(&self.error_count),
             errors: Arc::clone(&self.errors),
             buffer: Vec::with_capacity(RESULT_BUFFER_SIZE),
