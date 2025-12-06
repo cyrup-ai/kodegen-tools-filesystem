@@ -1,9 +1,10 @@
-use crate::{validate_path, display_path_relative_to_git_root};
+use crate::validate_path;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use kodegen_mcp_schema::filesystem::{FsReadFileArgs, FsReadFileOutput, FsReadFilePromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
+use kodegen_config::shorten_path_for_display;
+use kodegen_mcp_schema::filesystem::{FsReadFileArgs, FsReadFileOutput, ReadFilePrompts};
+use kodegen_mcp_schema::{Tool, ToolExecutionContext, ToolResponse, McpError};
 use mime_guess::from_path;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+
 use std::collections::VecDeque;
 use std::path::Path;
 use tokio::fs;
@@ -328,7 +329,7 @@ impl ReadFileTool {
 
 impl Tool for ReadFileTool {
     type Args = FsReadFileArgs;
-    type PromptArgs = FsReadFilePromptArgs;
+    type Prompts = ReadFilePrompts;
 
     fn name() -> &'static str {
         kodegen_mcp_schema::filesystem::FS_READ_FILE
@@ -349,7 +350,7 @@ impl Tool for ReadFileTool {
         true // Can read from URLs
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_schema::ToolArgs>::Output>, McpError> {
         // Auto-detect URL if not specified
         let is_url =
             args.is_url || args.path.starts_with("http://") || args.path.starts_with("https://");
@@ -375,7 +376,7 @@ impl Tool for ReadFileTool {
         let display_path = if is_url {
             args.path.clone()
         } else {
-            display_path_relative_to_git_root(
+            shorten_path_for_display(
                 std::path::Path::new(&args.path),
                 ctx.git_root()
             )
@@ -408,47 +409,5 @@ impl Tool for ReadFileTool {
             is_partial,
             content,
         }))
-    }
-
-    fn prompt_arguments() -> Vec<PromptArgument> {
-        vec![PromptArgument {
-            name: "file_type".to_string(),
-            title: None,
-            description: Some(
-                "Optional file type to focus examples on (e.g., 'json', 'rust', 'markdown')"
-                    .to_string(),
-            ),
-            required: Some(false),
-        }]
-    }
-
-    async fn prompt(&self, _args: Self::PromptArgs) -> Result<Vec<PromptMessage>, McpError> {
-        Ok(vec![
-            PromptMessage {
-                role: PromptMessageRole::User,
-                content: PromptMessageContent::text(
-                    "How do I use the fs_read_file tool to read a large file in chunks?",
-                ),
-            },
-            PromptMessage {
-                role: PromptMessageRole::Assistant,
-                content: PromptMessageContent::text(
-                    "The fs_read_file tool supports reading large files in chunks using offset and length parameters:\n\n\
-                     1. Basic usage: fs_read_file({\"path\": \"file.txt\"})\n\
-                     2. Read first 100 lines: fs_read_file({\"path\": \"file.txt\", \"length\": 100})\n\
-                     3. Read lines 100-200: fs_read_file({\"path\": \"file.txt\", \"offset\": 100, \"length\": 100})\n\
-                     4. Read last 30 lines: fs_read_file({\"path\": \"file.txt\", \"offset\": -30})\n\
-                     5. Read last 5 lines: fs_read_file({\"path\": \"file.txt\", \"offset\": -5})\n\
-                     6. Read from URL: fs_read_file({\"path\": \"https://example.com/data.json\", \"is_url\": true})\n\n\
-                     The tool automatically:\n\
-                     - Detects and validates file paths (expands ~, resolves symlinks)\n\
-                     - Detects image files and returns them as base64\n\
-                     - Adds partial read notices for text files\n\
-                     - Handles URL fetching with 30-second timeout\n\
-                     - Validates paths are within allowed directories\n\
-                     - Ignores length parameter when offset is negative (tail behavior)",
-                ),
-            },
-        ])
     }
 }

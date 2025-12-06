@@ -1,8 +1,8 @@
 use crate::ReadFileTool;
 use futures::future;
-use kodegen_mcp_schema::filesystem::{FileReadResult, FsReadMultipleFilesArgs, FsReadMultipleFilesOutput, FsReadMultipleFilesPromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use kodegen_config::shorten_path_for_display;
+use kodegen_mcp_schema::filesystem::{FileReadResult, FsReadMultipleFilesArgs, FsReadMultipleFilesOutput, ReadMultipleFilesPrompts};
+use kodegen_mcp_schema::{Tool, ToolExecutionContext, ToolResponse, McpError};
 
 // ============================================================================
 // TOOL STRUCT
@@ -69,7 +69,7 @@ impl ReadMultipleFilesTool {
 
 impl Tool for ReadMultipleFilesTool {
     type Args = FsReadMultipleFilesArgs;
-    type PromptArgs = FsReadMultipleFilesPromptArgs;
+    type Prompts = ReadMultipleFilesPrompts;
 
     fn name() -> &'static str {
         kodegen_mcp_schema::filesystem::FS_READ_MULTIPLE_FILES
@@ -90,7 +90,7 @@ impl Tool for ReadMultipleFilesTool {
         false // Only reads local files, not URLs
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_schema::ToolArgs>::Output>, McpError> {
         if args.paths.is_empty() {
             return Err(McpError::InvalidArguments(
                 "No paths provided. Please provide at least one file path.".to_string(),
@@ -112,9 +112,36 @@ impl Tool for ReadMultipleFilesTool {
         let files_read = results.iter().filter(|r| r.success).count();
         let files_failed = files_requested - files_read;
 
-        let summary = format!(
-            "\x1b[36m󰄶 Read multiple files (parallel)\x1b[0m\n 󰗚 Results: {files_read} successful · {files_failed} failed of {files_requested} total"
+        // Build header line (existing format for backward compatibility)
+        let mut summary = format!(
+            "\x1b[36m󰄶 Read multiple files (parallel)\x1b[0m\n 󰗚 Results: {files_read} successful · {files_failed} failed of {files_requested} total\n\n\n"
         );
+
+        // Sort results: failures first, then successes (both alphabetically by path)
+        let mut sorted_results = results.clone();
+        sorted_results.sort_by(|a, b| {
+            match (a.success, b.success) {
+                // Both success or both failure: sort alphabetically by path
+                (true, true) | (false, false) => a.path.cmp(&b.path),
+                // Failures come before successes
+                (false, true) => std::cmp::Ordering::Less,
+                (true, false) => std::cmp::Ordering::Greater,
+            }
+        });
+
+        // Format each file as a single line with icon and shortened path
+        for result in &sorted_results {
+            let display_path = shorten_path_for_display(
+                std::path::Path::new(&result.path),
+                ctx.git_root()
+            );
+            
+            if result.success {
+                summary.push_str(&format!("\x1b[32m 󰗚 {}\x1b[0m\n", display_path));
+            } else {
+                summary.push_str(&format!("\x1b[31m 󰅙 {}\x1b[0m\n", display_path));
+            }
+        }
 
         Ok(ToolResponse::new(summary, FsReadMultipleFilesOutput {
             success: true,
@@ -123,58 +150,5 @@ impl Tool for ReadMultipleFilesTool {
             files_failed,
             results,
         }))
-    }
-
-    fn prompt_arguments() -> Vec<PromptArgument> {
-        vec![PromptArgument {
-            name: "file_type".to_string(),
-            title: None,
-            description: Some(
-                "Optional file type to focus examples on (e.g., 'json', 'log', 'rust')"
-                    .to_string(),
-            ),
-            required: Some(false),
-        }]
-    }
-
-    async fn prompt(&self, _args: Self::PromptArgs) -> Result<Vec<PromptMessage>, McpError> {
-        Ok(vec![
-            PromptMessage {
-                role: PromptMessageRole::User,
-                content: PromptMessageContent::text("How do I read multiple files at once?"),
-            },
-            PromptMessage {
-                role: PromptMessageRole::Assistant,
-                content: PromptMessageContent::text(
-                    "The read_multiple_files tool reads multiple files in parallel:\n\n\
-                     1. Basic usage:\n\
-                        read_multiple_files({\n\
-                          \"paths\": [\"/path/file1.txt\", \"/path/file2.json\", \"/path/image.png\"]\n\
-                        })\n\n\
-                     2. With offset/length:\n\
-                        read_multiple_files({\n\
-                          \"paths\": [\"file1.txt\", \"file2.txt\"],\n\
-                          \"offset\": 0,\n\
-                          \"length\": 100\n\
-                        })\n\n\
-                     3. Read last 30 lines from multiple files:\n\
-                        read_multiple_files({\n\
-                          \"paths\": [\"log1.txt\", \"log2.txt\"],\n\
-                          \"offset\": -30\n\
-                        })\n\n\
-                     Benefits:\n\
-                     - Reads files in parallel for better performance\n\
-                     - Returns results for ALL files, even if some fail\n\
-                     - Each result includes content OR error\n\
-                     - Handles text files, images, and mixed types\n\
-                     - Same validation and features as read_file\n\
-                     - Supports negative offsets for tail behavior (length ignored)\n\n\
-                     Response format:\n\
-                     - results: Array of file results\n\
-                     - summary: Total, successful, and failed counts\n\n\
-                     Use this instead of calling read_file multiple times sequentially.",
-                ),
-            },
-        ])
     }
 }

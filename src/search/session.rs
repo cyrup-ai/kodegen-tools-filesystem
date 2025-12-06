@@ -294,7 +294,7 @@ impl SearchSession {
 
             return Ok(FsSearchOutput {
                 search: Some(self.search_id),
-                output: "[Background search started]\nUse action=READ to check progress.".to_string(),
+                output: "\x1b[36m󰺮 Background search started\x1b[0m\n 󰏥 Use action=READ to check progress".to_string(),
                 pattern,
                 path,
                 results: Vec::new(),
@@ -328,7 +328,7 @@ impl SearchSession {
                 Ok(FsSearchOutput {
                     search: Some(self.search_id),
                     output: format!(
-                        "Found {} matches in {} files so far\n\n[Search still running]\n[Use action=READ for more results]",
+                        "\x1b[33m󰏥 Found {} matches in {} files so far\x1b[0m\n\n\x1b[36m󰺮 Search still running\x1b[0m\n 󰅺 Use action=READ for more results",
                         state.match_count, state.files_searched
                     ),
                     pattern: state.pattern.clone(),
@@ -351,7 +351,7 @@ impl SearchSession {
                 Ok(FsSearchOutput {
                     search: Some(self.search_id),
                     output: format!(
-                        "Search completed: {} matches in {} files",
+                        "\x1b[32m󰗚 Search completed\x1b[0m\n 󰺮 {} matches in {} files",
                         state.match_count, state.files_searched
                     ),
                     pattern: state.pattern.clone(),
@@ -373,7 +373,7 @@ impl SearchSession {
                 // Task panicked
                 Ok(FsSearchOutput {
                     search: Some(self.search_id),
-                    output: format!("Search failed: {}", e),
+                    output: format!("\x1b[31m󰈛 Search failed\x1b[0m\n 󰅙 {}", e),
                     pattern: state.pattern.clone(),
                     path: state.path.clone(),
                     results: Vec::new(),
@@ -404,12 +404,12 @@ impl SearchSession {
             search: Some(self.search_id),
             output: if state.completed {
                 format!(
-                    "Search completed: {} matches in {} files",
+                    "\x1b[32m󰗚 Search completed\x1b[0m\n 󰺮 {} matches in {} files",
                     state.match_count, state.files_searched
                 )
             } else {
                 format!(
-                    "Search in progress: {} matches in {} files so far",
+                    "\x1b[33m󰏥 Search in progress\x1b[0m\n 󰺮 {} matches in {} files so far",
                     state.match_count, state.files_searched
                 )
             },

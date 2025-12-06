@@ -1,7 +1,7 @@
-use crate::{validate_path, display_path_relative_to_git_root};
-use kodegen_mcp_schema::filesystem::{FsMoveFileArgs, FsMoveFileOutput, FsMoveFilePromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use crate::validate_path;
+use kodegen_config::shorten_path_for_display;
+use kodegen_mcp_schema::filesystem::{FsMoveFileArgs, FsMoveFileOutput, MoveFilePrompts};
+use kodegen_mcp_schema::{Tool, ToolExecutionContext, ToolResponse, McpError};
 use tokio::fs;
 
 #[derive(Clone)]
@@ -18,7 +18,7 @@ impl MoveFileTool {
 
 impl Tool for MoveFileTool {
     type Args = FsMoveFileArgs;
-    type PromptArgs = FsMoveFilePromptArgs;
+    type Prompts = MoveFilePrompts;
 
     fn name() -> &'static str {
         kodegen_mcp_schema::filesystem::FS_MOVE_FILE
@@ -41,7 +41,7 @@ impl Tool for MoveFileTool {
         false // Moving twice would fail (source no longer exists)
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_schema::ToolArgs>::Output>, McpError> {
         let client_pwd = ctx.pwd();
         let source_path = validate_path(&args.source, &self.config_manager, client_pwd).await?;
         let dest_path = validate_path(&args.destination, &self.config_manager, client_pwd).await?;
@@ -49,8 +49,8 @@ impl Tool for MoveFileTool {
         fs::rename(&source_path, &dest_path).await?;
 
         // Human summary
-        let display_source = display_path_relative_to_git_root(&source_path, ctx.git_root());
-        let display_dest = display_path_relative_to_git_root(&dest_path, ctx.git_root());
+        let display_source = shorten_path_for_display(&source_path, ctx.git_root());
+        let display_dest = shorten_path_for_display(&dest_path, ctx.git_root());
         let summary = format!(
             "\x1b[34m󰉐 Moved file/directory\x1b[0m\n\
              󰜱 From: {}\n\
@@ -65,43 +65,5 @@ impl Tool for MoveFileTool {
             destination: dest_path.to_string_lossy().to_string(),
             message: "File/directory moved successfully".to_string(),
         }))
-    }
-
-    fn prompt_arguments() -> Vec<PromptArgument> {
-        vec![PromptArgument {
-            name: "operation_focus".to_string(),
-            title: None,
-            description: Some(
-                "Optional focus area for teaching prompt. Choose: 'rename' (file/directory renaming), \
-                 'move_directory' (moving entire directory trees), 'atomic_behavior' (atomic operation guarantees), \
-                 'edge_cases' (handling symlinks/special cases), or 'best_practices' (safe movement patterns)"
-                    .to_string(),
-            ),
-            required: Some(false),
-        }]
-    }
-
-    async fn prompt(&self, _args: Self::PromptArgs) -> Result<Vec<PromptMessage>, McpError> {
-        Ok(vec![
-            PromptMessage {
-                role: PromptMessageRole::User,
-                content: PromptMessageContent::text("How do I move or rename files?"),
-            },
-            PromptMessage {
-                role: PromptMessageRole::Assistant,
-                content: PromptMessageContent::text(
-                    "The move_file tool moves or renames files and directories:\n\n\
-                     1. Rename: move_file({\"source\": \"/path/old.txt\", \"destination\": \"/path/new.txt\"})\n\
-                     2. Move: move_file({\"source\": \"/path/file.txt\", \"destination\": \"/other/file.txt\"})\n\
-                     3. Move directory: move_file({\"source\": \"/path/dir\", \"destination\": \"/other/dir\"})\n\n\
-                     Important notes:\n\
-                     - Both source and destination paths are validated\n\
-                     - Source must exist or the operation fails\n\
-                     - If destination exists, it may be overwritten (OS-dependent)\n\
-                     - Moving a directory moves all its contents\n\
-                     - This operation is atomic on most filesystems",
-                ),
-            },
-        ])
     }
 }

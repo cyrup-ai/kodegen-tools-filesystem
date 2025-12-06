@@ -1,8 +1,8 @@
-use crate::{validate_path, display_path_relative_to_git_root};
-use kodegen_mcp_schema::filesystem::{DirectoryEntry, FsListDirectoryArgs, FsListDirectoryOutput, FsListDirectoryPromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
+use crate::validate_path;
+use kodegen_config::shorten_path_for_display;
+use kodegen_mcp_schema::filesystem::{DirectoryEntry, FsListDirectoryArgs, FsListDirectoryOutput, ListDirectoryPrompts};
+use kodegen_mcp_schema::{Tool, ToolExecutionContext, ToolResponse, McpError};
 use log::warn;
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
 use tokio::fs;
 
 // ============================================================================
@@ -27,7 +27,7 @@ impl ListDirectoryTool {
 
 impl Tool for ListDirectoryTool {
     type Args = FsListDirectoryArgs;
-    type PromptArgs = FsListDirectoryPromptArgs;
+    type Prompts = ListDirectoryPrompts;
 
     fn name() -> &'static str {
         kodegen_mcp_schema::filesystem::FS_LIST_DIRECTORY
@@ -43,7 +43,7 @@ impl Tool for ListDirectoryTool {
         true
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_schema::ToolArgs>::Output>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager, ctx.pwd()).await?;
 
         let mut read_entries = fs::read_dir(&valid_path).await?;
@@ -91,7 +91,7 @@ impl Tool for ListDirectoryTool {
 
         // Human summary
         let total = entries.len();
-        let display_path = display_path_relative_to_git_root(&valid_path, ctx.git_root());
+        let display_path = shorten_path_for_display(&valid_path, ctx.git_root());
         let summary = format!(
             "\x1b[36m󰉋 Listed directory: {}\x1b[0m\n 󰄵 Contents: {} items ({} dirs · {} files)",
             display_path,
@@ -108,40 +108,5 @@ impl Tool for ListDirectoryTool {
             files: file_count,
             entries,
         }))
-    }
-
-    fn prompt_arguments() -> Vec<PromptArgument> {
-        vec![PromptArgument {
-            name: "show_advanced".to_string(),
-            title: None,
-            description: Some("Show advanced filtering options".to_string()),
-            required: Some(false),
-        }]
-    }
-
-    async fn prompt(&self, _args: Self::PromptArgs) -> Result<Vec<PromptMessage>, McpError> {
-        Ok(vec![
-            PromptMessage {
-                role: PromptMessageRole::User,
-                content: PromptMessageContent::text("How do I list directory contents?"),
-            },
-            PromptMessage {
-                role: PromptMessageRole::Assistant,
-                content: PromptMessageContent::text(
-                    "The list_directory tool shows all files and directories:\n\n\
-                     1. Basic usage: list_directory({\"path\": \"/path/to/dir\"})\n\
-                     2. Include hidden files: list_directory({\"path\": \"/path/to/dir\", \"include_hidden\": true})\n\n\
-                     Output format:\n\
-                     - Directories are prefixed with [DIR]\n\
-                     - Files are prefixed with [FILE]\n\
-                     - Results are sorted alphabetically\n\n\
-                     The tool automatically:\n\
-                     - Validates the directory path exists\n\
-                     - Filters hidden files by default (unless include_hidden=true)\n\
-                     - Provides counts of directories and files\n\
-                     - Handles permission errors gracefully",
-                ),
-            },
-        ])
     }
 }

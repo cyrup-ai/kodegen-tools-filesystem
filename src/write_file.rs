@@ -1,7 +1,7 @@
-use crate::{validate_path, display_path_relative_to_git_root};
-use kodegen_mcp_schema::filesystem::{FsWriteFileArgs, FsWriteFileOutput, FsWriteFilePromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use crate::validate_path;
+use kodegen_config::shorten_path_for_display;
+use kodegen_mcp_schema::filesystem::{FsWriteFileArgs, FsWriteFileOutput, WriteFilePrompts};
+use kodegen_mcp_schema::{Tool, ToolExecutionContext, ToolResponse, McpError};
 use tokio::fs;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
@@ -28,7 +28,7 @@ impl WriteFileTool {
 
 impl Tool for WriteFileTool {
     type Args = FsWriteFileArgs;
-    type PromptArgs = FsWriteFilePromptArgs;
+    type Prompts = WriteFilePrompts;
 
     fn name() -> &'static str {
         kodegen_mcp_schema::filesystem::FS_WRITE_FILE
@@ -52,7 +52,7 @@ impl Tool for WriteFileTool {
         false // Each write changes the file
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_schema::ToolArgs>::Output>, McpError> {
         let valid_path = validate_path(&args.path, &self.config_manager, ctx.pwd()).await?;
 
         // Create parent directories if needed
@@ -79,7 +79,7 @@ impl Tool for WriteFileTool {
 
         // Human summary
         let verb = if mode == "append" { "Appended" } else { "Wrote" };
-        let display_path = display_path_relative_to_git_root(&valid_path, ctx.git_root());
+        let display_path = shorten_path_for_display(&valid_path, ctx.git_root());
         let summary = format!(
             "\x1b[32m󰏫 {} file: {}\x1b[0m\n\
              󰄴 Written: {} bytes ({} lines) · Mode: {}",
@@ -97,42 +97,5 @@ impl Tool for WriteFileTool {
             lines_written: line_count as u64,
             mode,
         }))
-    }
-
-    fn prompt_arguments() -> Vec<PromptArgument> {
-        vec![PromptArgument {
-            name: "example_type".to_string(),
-            title: None,
-            description: Some("Type of example to show (e.g., 'append', 'overwrite')".to_string()),
-            required: Some(false),
-        }]
-    }
-
-    async fn prompt(&self, _args: Self::PromptArgs) -> Result<Vec<PromptMessage>, McpError> {
-        Ok(vec![
-            PromptMessage {
-                role: PromptMessageRole::User,
-                content: PromptMessageContent::text(
-                    "How do I use fs_write_file to safely write and append to files?",
-                ),
-            },
-            PromptMessage {
-                role: PromptMessageRole::Assistant,
-                content: PromptMessageContent::text(
-                    "The fs_write_file tool supports two modes:\n\n\
-                     1. Rewrite mode (default): fs_write_file({\"path\": \"file.txt\", \"content\": \"new content\"})\n\
-                     2. Append mode: fs_write_file({\"path\": \"file.txt\", \"content\": \"more content\", \"mode\": \"append\"})\n\n\
-                     The tool automatically:\n\
-                     - Validates and normalizes file paths\n\
-                     - Creates parent directories if needed\n\
-                     - Handles file permissions\n\
-                     - Creates the file if it doesn't exist (both modes)\n\n\
-                     Safety notes:\n\
-                     - Rewrite mode overwrites the entire file\n\
-                     - Append mode safely adds to the end\n\
-                     - Path validation prevents writing outside allowed directories",
-                ),
-            },
-        ])
     }
 }

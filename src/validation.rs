@@ -1,4 +1,4 @@
-use kodegen_mcp_tool::error::McpError;
+use kodegen_mcp_schema::McpError;
 use log::warn;
 use std::path::{Path, PathBuf};
 use tokio::fs;
@@ -217,47 +217,4 @@ pub async fn validate_path(
             timeout_ms
         )))
     }
-}
-
-/// Convert an absolute path to a display string relative to git_root if available
-///
-/// This function formats paths for user-facing output (Content[0]):
-/// - If git_root is available and path is within it: returns relative path
-/// - Otherwise: returns absolute path as-is
-///
-/// # Examples
-///
-/// ```
-/// use std::path::Path;
-/// use kodegen_tools_filesystem::display_path_relative_to_git_root;
-///
-/// let git_root = Some(Path::new("/Users/davidmaple/kodegen-workspace"));
-/// let file_path = Path::new("/Users/davidmaple/kodegen-workspace/packages/kodegen-utils/Cargo.toml");
-/// let display = display_path_relative_to_git_root(file_path, git_root);
-/// assert_eq!(display, "packages/kodegen-utils/Cargo.toml");
-/// ```
-///
-/// ```
-/// use std::path::Path;
-/// use kodegen_tools_filesystem::display_path_relative_to_git_root;
-///
-/// // When git_root is not available, return absolute path
-/// let file_path = Path::new("/Users/davidmaple/kodegen-workspace/packages/kodegen-utils/Cargo.toml");
-/// let display = display_path_relative_to_git_root(file_path, None);
-/// assert_eq!(display, "/Users/davidmaple/kodegen-workspace/packages/kodegen-utils/Cargo.toml");
-/// ```
-pub fn display_path_relative_to_git_root(
-    path: &Path,
-    git_root: Option<&Path>,
-) -> String {
-    if let Some(root) = git_root {
-        // Try to strip the git root prefix
-        if let Ok(relative) = path.strip_prefix(root) {
-            // Return relative path as string
-            return relative.display().to_string();
-        }
-    }
-    
-    // Fallback: return absolute path if git_root unavailable or path not within git_root
-    path.display().to_string()
 }

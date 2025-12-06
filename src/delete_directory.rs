@@ -1,7 +1,7 @@
-use crate::{validate_path, display_path_relative_to_git_root};
-use kodegen_mcp_schema::filesystem::{FsDeleteDirectoryArgs, FsDeleteDirectoryOutput, FsDeleteDirectoryPromptArgs};
-use kodegen_mcp_tool::{Tool, ToolExecutionContext, ToolResponse, error::McpError};
-use rmcp::model::{PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole};
+use crate::validate_path;
+use kodegen_config::shorten_path_for_display;
+use kodegen_mcp_schema::filesystem::{FsDeleteDirectoryArgs, FsDeleteDirectoryOutput, DeleteDirectoryPrompts};
+use kodegen_mcp_schema::{Tool, ToolExecutionContext, ToolResponse, McpError};
 use tokio::fs;
 
 #[derive(Clone)]
@@ -18,7 +18,7 @@ impl DeleteDirectoryTool {
 
 impl Tool for DeleteDirectoryTool {
     type Args = FsDeleteDirectoryArgs;
-    type PromptArgs = FsDeleteDirectoryPromptArgs;
+    type Prompts = DeleteDirectoryPrompts;
 
     fn name() -> &'static str {
         kodegen_mcp_schema::filesystem::FS_DELETE_DIRECTORY
@@ -41,7 +41,7 @@ impl Tool for DeleteDirectoryTool {
         false // Deleting twice will fail
     }
 
-    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_tool::ToolArgs>::Output>, McpError> {
+    async fn execute(&self, args: Self::Args, ctx: ToolExecutionContext) -> Result<ToolResponse<<Self::Args as kodegen_mcp_schema::ToolArgs>::Output>, McpError> {
         // Safety check: require explicit recursive flag
         if !args.recursive {
             return Err(McpError::InvalidArguments(
@@ -63,7 +63,7 @@ impl Tool for DeleteDirectoryTool {
         fs::remove_dir_all(&valid_path).await?;
 
         // Human summary
-        let display_path = display_path_relative_to_git_root(&valid_path, ctx.git_root());
+        let display_path = shorten_path_for_display(&valid_path, ctx.git_root());
         let summary = format!(
             "\x1b[31m󰆴 Deleted directory (recursive)\x1b[0m\n\
              󰉋 Removed: {}\n\
@@ -76,34 +76,5 @@ impl Tool for DeleteDirectoryTool {
             path: valid_path.to_string_lossy().to_string(),
             message: "Directory and all contents deleted successfully".to_string(),
         }))
-    }
-
-    fn prompt_arguments() -> Vec<PromptArgument> {
-        vec![]
-    }
-
-    async fn prompt(&self, _args: Self::PromptArgs) -> Result<Vec<PromptMessage>, McpError> {
-        Ok(vec![
-            PromptMessage {
-                role: PromptMessageRole::User,
-                content: PromptMessageContent::text("How do I delete directories?"),
-            },
-            PromptMessage {
-                role: PromptMessageRole::Assistant,
-                content: PromptMessageContent::text(
-                    "The delete_directory tool recursively deletes directories:\n\n\
-                     Usage: delete_directory({\"path\": \"/path/to/dir\", \"recursive\": true})\n\n\
-                     Safety features:\n\
-                     - Requires recursive=true flag to prevent accidental deletion\n\
-                     - Only deletes directories, not individual files\n\
-                     - Validates path exists and is actually a directory\n\
-                     - Validates path is within allowed directories\n\
-                     - Deletes ALL contents recursively (files and subdirectories)\n\n\
-                     IMPORTANT: This operation is permanent and cannot be undone!\n\
-                     All files and subdirectories will be permanently deleted.\n\n\
-                     To delete individual files, use delete_file instead.",
-                ),
-            },
-        ])
     }
 }

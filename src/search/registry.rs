@@ -69,7 +69,15 @@ impl SearchRegistry {
         // Sort by search ID
         snapshots.sort_by_key(|s| s.search);
 
-        let output = serde_json::to_string_pretty(&snapshots)?;
+        let output = if snapshots.is_empty() {
+            "\x1b[34m󰅍 No active searches\x1b[0m".to_string()
+        } else {
+            format!(
+                "\x1b[34m󰅍 Active searches\x1b[0m ({})\n\n{}",
+                snapshots.len(),
+                serde_json::to_string_pretty(&snapshots)?
+            )
+        };
 
         Ok(FsSearchOutput {
             search: None, // None indicates LIST response with multiple searches
@@ -105,7 +113,7 @@ impl SearchRegistry {
 
             Ok(FsSearchOutput {
                 search: Some(search_id),
-                output: format!("Search {} cancelled and resources cleaned up", search_id),
+                output: format!("\x1b[31m󰈛 Search {} cancelled\x1b[0m\n 󰆴 Resources cleaned up", search_id),
                 pattern: String::new(),
                 path: String::new(),
                 results: Vec::new(),
