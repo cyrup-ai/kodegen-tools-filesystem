@@ -39,7 +39,7 @@ pub mod search;
 /// This function is non-blocking - the server runs in background tasks.
 ///
 /// # Arguments
-/// * `addr` - Socket address to bind to (e.g., "127.0.0.1:30437")
+/// * `addr` - Socket address to bind to (e.g., "127.0.0.1:30443")
 /// * `tls_cert` - Optional path to TLS certificate file
 /// * `tls_key` - Optional path to TLS private key file
 ///
@@ -50,100 +50,18 @@ pub async fn start_server(
     tls_cert: Option<std::path::PathBuf>,
     tls_key: Option<std::path::PathBuf>,
 ) -> anyhow::Result<kodegen_server_http::ServerHandle> {
-    use kodegen_server_http::{create_http_server, Managers, RouterSet, register_tool};
-    use rmcp::handler::server::router::{prompt::PromptRouter, tool::ToolRouter};
-    use std::time::Duration;
+    // Bind to the address first
+    let listener = tokio::net::TcpListener::bind(addr).await
+        .map_err(|e| anyhow::anyhow!("Failed to bind to {}: {}", addr, e))?;
 
+    // Convert separate cert/key into Option<(cert, key)> tuple
     let tls_config = match (tls_cert, tls_key) {
         (Some(cert), Some(key)) => Some((cert, key)),
         _ => None,
     };
 
-    let shutdown_timeout = Duration::from_secs(30);
-    let session_keep_alive = Duration::ZERO;
-
-    create_http_server("filesystem", addr, tls_config, shutdown_timeout, session_keep_alive, |config: &kodegen_config_manager::ConfigManager, _tracker| {
-        let config = config.clone();
-        Box::pin(async move {
-            let tool_router = ToolRouter::new();
-            let prompt_router = PromptRouter::new();
-            let managers = Managers::new();
-
-            let file_read_line_limit = config.get_file_read_line_limit();
-
-            // Register all 14 filesystem tools
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::ReadFileTool::new(file_read_line_limit, config.clone()),
-            );
-
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::ReadMultipleFilesTool::new(file_read_line_limit, config.clone()),
-            );
-
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::WriteFileTool::new(config.clone()),
-            );
-
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::MoveFileTool::new(config.clone()),
-            );
-
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::DeleteFileTool::new(config.clone()),
-            );
-
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::DeleteDirectoryTool::new(config.clone()),
-            );
-
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::ListDirectoryTool::new(config.clone()),
-            );
-
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::CreateDirectoryTool::new(config.clone()),
-            );
-
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::GetFileInfoTool::new(config.clone()),
-            );
-
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::EditBlockTool::new(config.clone()),
-            );
-
-            // Search tools - create registry for connection isolation
-            let search_registry = std::sync::Arc::new(crate::search::SearchRegistry::new());
-            
-            let (tool_router, prompt_router) = register_tool(
-                tool_router,
-                prompt_router,
-                crate::search::FsSearchTool::new(search_registry),
-            );
-
-            Ok(RouterSet::new(tool_router, prompt_router, managers))
-        })
-    }).await
+    // Delegate to start_server_with_listener
+    start_server_with_listener(listener, tls_config).await
 }
 
 /// Start filesystem HTTP server using pre-bound listener (TOCTOU-safe)
@@ -161,23 +79,24 @@ pub async fn start_server_with_listener(
     listener: tokio::net::TcpListener,
     tls_config: Option<(std::path::PathBuf, std::path::PathBuf)>,
 ) -> anyhow::Result<kodegen_server_http::ServerHandle> {
-    use kodegen_server_http::{create_http_server_with_listener, Managers, RouterSet, register_tool};
+    use kodegen_server_http::{ServerBuilder, Managers, RouterSet, register_tool};
+    use kodegen_config_manager::ConfigManager;
     use rmcp::handler::server::router::{prompt::PromptRouter, tool::ToolRouter};
-    use std::time::Duration;
 
-    let shutdown_timeout = Duration::from_secs(30);
-    let session_keep_alive = Duration::ZERO;
+    let mut builder = ServerBuilder::new()
+        .category(kodegen_config::CATEGORY_FILESYSTEM)
+        .register_tools(|| async {
+            // Initialize ConfigManager for tool configuration
+            let config = ConfigManager::new();
+            config.init().await?;
 
-    create_http_server_with_listener("filesystem", listener, tls_config, shutdown_timeout, session_keep_alive, |config: &kodegen_config_manager::ConfigManager, _tracker| {
-        let config = config.clone();
-        Box::pin(async move {
             let tool_router = ToolRouter::new();
             let prompt_router = PromptRouter::new();
             let managers = Managers::new();
 
             let file_read_line_limit = config.get_file_read_line_limit();
 
-            // Register all 14 filesystem tools
+            // Register all 11 filesystem tools
             let (tool_router, prompt_router) = register_tool(
                 tool_router,
                 prompt_router,
@@ -240,7 +159,7 @@ pub async fn start_server_with_listener(
 
             // Search tools - create registry for connection isolation
             let search_registry = std::sync::Arc::new(crate::search::SearchRegistry::new());
-            
+
             let (tool_router, prompt_router) = register_tool(
                 tool_router,
                 prompt_router,
@@ -249,5 +168,12 @@ pub async fn start_server_with_listener(
 
             Ok(RouterSet::new(tool_router, prompt_router, managers))
         })
-    }).await
+        .with_listener(listener);
+
+    // Add TLS config if provided
+    if let Some((cert, key)) = tls_config {
+        builder = builder.with_tls_config(cert, key);
+    }
+
+    builder.serve().await
 }

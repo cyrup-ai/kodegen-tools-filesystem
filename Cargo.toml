@@ -1,6 +1,6 @@
 [package]
 name = "kodegen_tools_filesystem"
-version = "0.8.0"
+version = "0.10.0"
 edition = "2024"
 description = "KODEGEN.ᴀɪ: Memory-efficient, Blazing-Fast, MCP tools for code generation agents."
 authors = ["KODEGEN.ᴀɪ"]
@@ -29,11 +29,15 @@ macos = "public.app-category.developer-tools"
 
 
 [dependencies]
-kodegen_mcp_schema = { version = "0.8" }
-kodegen_config = { version = "0.8" }
-kodegen_config_manager = { version = "0.8" }
-kodegen_utils = { version = "0.8" }
-kodegen_server_http = { version = "0.8" }
+kodegen_mcp_schema = { version = "0.10" }
+kodegen_config = { version = "0.10" }
+kodegen_config_manager = { version = "0.10" }
+# Character analysis and caching (moved from kodegen-utils)
+lru = "0.16"
+parking_lot = "0.12"
+unicode-normalization = "0.1"
+once_cell = "1"
+kodegen_server_http = { version = "0.10" }
 
 # MCP SDK - for Tool implementation
 rmcp = { version = "0.10", features = ["client", "schemars", "server"] }
@@ -95,7 +99,7 @@ uuid = { version = "1", features = ["serde", "v4"] }
 
 [dev-dependencies]
 tempfile = "3"
-kodegen_mcp_client = { version = "0.8" }
+kodegen_mcp_client = { version = "0.10" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

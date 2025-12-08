@@ -3,22 +3,28 @@
 //! Serves filesystem tools via HTTP/HTTPS transport using kodegen_server_http.
 
 use anyhow::Result;
-use kodegen_server_http::{run_http_server, Managers, RouterSet, register_tool, ConnectionCleanupFn};
+use kodegen_config::CATEGORY_FILESYSTEM;
+use kodegen_config_manager::ConfigManager;
+use kodegen_server_http::{ServerBuilder, Managers, RouterSet, register_tool, ConnectionCleanupFn};
 use rmcp::handler::server::router::{prompt::PromptRouter, tool::ToolRouter};
 use std::future::Future;
 use std::pin::Pin;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    run_http_server("filesystem", |config, _tracker| {
-        let config = config.clone();
-        Box::pin(async move {
-        let tool_router = ToolRouter::new();
-        let prompt_router = PromptRouter::new();
-        let managers = Managers::new();
+    ServerBuilder::new()
+        .category(CATEGORY_FILESYSTEM)
+        .register_tools(|| async {
+            // Initialize ConfigManager for tool configuration
+            let config = ConfigManager::new();
+            config.init().await?;
 
-        // Get configuration values
-        let file_read_line_limit = config.get_file_read_line_limit();
+            let tool_router = ToolRouter::new();
+            let prompt_router = PromptRouter::new();
+            let managers = Managers::new();
+
+            // Get configuration values
+            let file_read_line_limit = config.get_file_read_line_limit();
 
         // Register all 11 filesystem tools
         let (tool_router, prompt_router) = register_tool(
@@ -109,10 +115,10 @@ async fn main() -> Result<()> {
             }) as Pin<Box<dyn Future<Output = ()> + Send + 'static>>
         });
 
-        let mut router_set = RouterSet::new(tool_router, prompt_router, managers);
-        router_set.connection_cleanup = Some(cleanup);
-        Ok(router_set)
+            let mut router_set = RouterSet::new(tool_router, prompt_router, managers);
+            router_set.connection_cleanup = Some(cleanup);
+            Ok(router_set)
         })
-    })
-    .await
+        .run()
+        .await
 }

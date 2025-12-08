@@ -1,15 +1,25 @@
+// Local modules (moved from kodegen-utils)
+mod char_analysis;
+mod char_diff;
+mod edit_log;
+mod fuzzy_logger;
+mod fuzzy_search;
+mod line_endings;
+mod suggestions;
+
 use crate::validate_path;
 use chrono::Utc;
 use kodegen_config::shorten_path_for_display;
 use kodegen_mcp_schema::filesystem::{FsEditBlockArgs, FsEditBlockOutput, EditBlockPrompts};
 use kodegen_mcp_schema::{Tool, ToolExecutionContext, ToolResponse, McpError};
-use kodegen_utils::char_analysis::CharCodeData;
-use kodegen_utils::char_diff::CharDiff;
-use kodegen_utils::edit_log::{EditBlockLogEntry, EditBlockResult, get_edit_logger};
-use kodegen_utils::fuzzy_logger::{FuzzySearchLogEntry, get_logger};
-use kodegen_utils::fuzzy_search::{get_similarity_ratio, recursive_fuzzy_index_of_with_defaults};
-use kodegen_utils::line_endings::{detect_line_ending, normalize_line_endings};
-use kodegen_utils::suggestions::{EditFailureReason, Suggestion, SuggestionContext};
+
+use char_analysis::CharCodeData;
+use char_diff::CharDiff;
+use edit_log::{EditBlockLogEntry, EditBlockResult, get_edit_logger};
+use fuzzy_logger::{FuzzySearchLogEntry, get_logger};
+use fuzzy_search::{get_similarity_ratio, recursive_fuzzy_index_of_with_defaults};
+use line_endings::{detect_line_ending, normalize_line_endings};
+use suggestions::{EditFailureReason, Suggestion, SuggestionContext};
 
 use std::time::Instant;
 use tokio::fs;
