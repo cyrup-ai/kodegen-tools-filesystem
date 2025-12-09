@@ -52,9 +52,9 @@ impl Tool for MoveFileTool {
         let display_source = shorten_path_for_display(&source_path, ctx.git_root());
         let display_dest = shorten_path_for_display(&dest_path, ctx.git_root());
         let summary = format!(
-            "\x1b[34m󰉐 Moved file/directory\x1b[0m\n\
-             󰜱 From: {}\n\
-             󰜱 To:   {}",
+            "\x1b[34mMoved file/directory\x1b[0m\n\
+             From: {}\n\
+             To:   {}",
             display_source,
             display_dest
         );

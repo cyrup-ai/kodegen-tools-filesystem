@@ -58,8 +58,8 @@ impl Tool for DeleteFileTool {
         // Human summary
         let display_path = shorten_path_for_display(&valid_path, ctx.git_root());
         let summary = format!(
-            "\x1b[31m󰆴 Deleted file: {}\x1b[0m\n\
-             󰚽 Permanent: File removed from filesystem",
+            "\x1b[31mDeleted file: {}\x1b[0m\n\
+             Permanent: File removed from filesystem",
             display_path
         );
 

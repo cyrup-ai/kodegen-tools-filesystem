@@ -81,8 +81,8 @@ impl Tool for WriteFileTool {
         let verb = if mode == "append" { "Appended" } else { "Wrote" };
         let display_path = shorten_path_for_display(&valid_path, ctx.git_root());
         let summary = format!(
-            "\x1b[32m󰏫 {} file: {}\x1b[0m\n\
-             󰄴 Written: {} bytes ({} lines) · Mode: {}",
+            "\x1b[32m{} file: {}\x1b[0m\n\
+             Written: {} bytes ({} lines) · Mode: {}",
             verb,
             display_path,
             content_bytes,

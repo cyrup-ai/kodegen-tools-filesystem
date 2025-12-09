@@ -126,8 +126,8 @@ impl Tool for GetFileInfoTool {
         let line_count_str = line_count_opt.map_or(String::new(), |lc| format!("{lc} lines · "));
         let display_path = shorten_path_for_display(&valid_path, ctx.git_root());
         let summary = format!(
-            "\x1b[35m󰙅 {type_str} Metadata: {display_path}\x1b[0m\n\
-             󰘖 Details: {size_str} · {line_count_str}Modified: {time_str} · Perms: {perms_str}"
+            "\x1b[35m{type_str} Metadata: {display_path}\x1b[0m\n\
+             Details: {size_str} · {line_count_str}Modified: {time_str} · Perms: {perms_str}"
         );
 
         Ok(ToolResponse::new(summary, FsGetFileInfoOutput {

@@ -65,9 +65,9 @@ impl Tool for DeleteDirectoryTool {
         // Human summary
         let display_path = shorten_path_for_display(&valid_path, ctx.git_root());
         let summary = format!(
-            "\x1b[31m󰆴 Deleted directory (recursive)\x1b[0m\n\
-             󰉋 Removed: {}\n\
-             󰚽 Permanent: All contents deleted",
+            "\x1b[31mDeleted directory (recursive)\x1b[0m\n\
+             Removed: {}\n\
+             Permanent: All contents deleted",
             display_path
         );
 

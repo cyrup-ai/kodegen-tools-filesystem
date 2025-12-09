@@ -57,8 +57,8 @@ impl Tool for CreateDirectoryTool {
         // Human summary
         let display_path = shorten_path_for_display(&valid_path, ctx.git_root());
         let summary = format!(
-            "\x1b[32m󰉋 Created directory: {}\x1b[0m\n\
-             󰄴 Status: Directory ready (idempotent)",
+            "\x1b[32mCreated directory: {}\x1b[0m\n\
+             Status: Directory ready (idempotent)",
             display_path
         );
 

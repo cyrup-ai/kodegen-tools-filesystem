@@ -114,7 +114,7 @@ impl Tool for ReadMultipleFilesTool {
 
         // Build header line (existing format for backward compatibility)
         let mut summary = format!(
-            "\x1b[36m󰄶 Read multiple files (parallel)\x1b[0m\n 󰗚 Results: {files_read} successful · {files_failed} failed of {files_requested} total\n\n\n"
+            "\x1b[36mRead multiple files (parallel)\x1b[0m\nResults: {files_read} successful · {files_failed} failed of {files_requested} total\n\n\n"
         );
 
         // Sort results: failures first, then successes (both alphabetically by path)
@@ -137,9 +137,9 @@ impl Tool for ReadMultipleFilesTool {
             );
             
             if result.success {
-                summary.push_str(&format!("\x1b[32m 󰗚 {}\x1b[0m\n", display_path));
+                summary.push_str(&format!("\x1b[32m{}\x1b[0m\n", display_path));
             } else {
-                summary.push_str(&format!("\x1b[31m 󰅙 {}\x1b[0m\n", display_path));
+                summary.push_str(&format!("\x1b[31m{}\x1b[0m\n", display_path));
             }
         }
 

@@ -93,7 +93,7 @@ impl Tool for ListDirectoryTool {
         let total = entries.len();
         let display_path = shorten_path_for_display(&valid_path, ctx.git_root());
         let summary = format!(
-            "\x1b[36m󰉋 Listed directory: {}\x1b[0m\n 󰄵 Contents: {} items ({} dirs · {} files)",
+            "\x1b[36mListed directory: {}\x1b[0m\nContents: {} items ({} dirs · {} files)",
             display_path,
             total,
             dir_count,

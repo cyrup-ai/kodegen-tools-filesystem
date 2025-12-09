@@ -369,8 +369,8 @@ impl Tool for EditBlockTool {
                 ctx.git_root()
             );
             let summary = format!(
-                "\x1b[33m󰆐 {} replacement(s) in {display_path}\x1b[0m\n\
-                 󰢬 Precision: {} → {} bytes (delta: {delta_str}){warning}",
+                "\x1b[33m{} replacement(s) in {display_path}\x1b[0m\n\
+                 Precision: {} → {} bytes (delta: {delta_str}){warning}",
                 occurrence_count,
                 args.old_string.len(),
                 args.new_string.len(),
@@ -413,8 +413,8 @@ impl Tool for EditBlockTool {
             ctx.git_root()
         );
         let summary = format!(
-            "\x1b[33m󰆐 {} replacement(s) in {display_path}\x1b[0m\n\
-             󰢬 Precision: {} → {} bytes (delta: {delta_str}) · Expected: {}{warning}",
+            "\x1b[33m{} replacement(s) in {display_path}\x1b[0m\n\
+             Precision: {} → {} bytes (delta: {delta_str}) · Expected: {}{warning}",
             occurrence_count,
             args.old_string.len(),
             args.new_string.len(),

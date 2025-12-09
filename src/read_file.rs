@@ -385,12 +385,12 @@ impl Tool for ReadFileTool {
         let summary = if is_image {
             let size_kb = size_bytes.map_or(0.0, |b| b as f64 / 1024.0);
             format!(
-                "\x1b[36m󰗚 Read image: {display_path}\x1b[0m\n 󰈙 Format: {mime_type} · Size: {size_kb:.1} KB"
+                "\x1b[36mRead image: {display_path}\x1b[0m\nFormat: {mime_type} · Size: {size_kb:.1} KB"
             )
         } else {
             let read = lines_read.unwrap_or(0);
             format!(
-                "\x1b[36m󰗚 Read file: {display_path}\x1b[0m\n 󰈙 Content: {read} lines · {} bytes · Use Content[1] for data",
+                "\x1b[36mRead file: {display_path}\x1b[0m\nContent: {read} lines · {} bytes · Use Content[1] for data",
                 content.len()
             )
         };
