@@ -10,9 +10,20 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use tokio::sync::RwLock;
 
+/// Compiled pattern for matching filenames
+#[derive(Clone)]
+pub(super) enum CompiledPattern {
+    /// Compiled regex pattern
+    Regex(regex::Regex),
+    /// Compiled glob pattern  
+    Glob(globset::GlobMatcher),
+    /// Plain substring (uses pattern/pattern_lower fields)
+    Substring,
+}
+
 /// Parallel visitor for file search
 pub(super) struct FileSearchVisitor {
-    pub(super) glob_pattern: Option<globset::GlobMatcher>,
+    pub(super) compiled_pattern: CompiledPattern,
     pub(super) pattern: String,
     pub(super) pattern_lower: String,
     pub(super) case_mode: CaseMode,
@@ -34,7 +45,7 @@ impl FileSearchVisitor {
     /// Check if this is an exact match (not a partial/wildcard match)
     pub(super) fn is_exact_match(&self, file_name: &str) -> bool {
         matching::is_exact_match(
-            &self.glob_pattern,
+            &self.compiled_pattern,
             &self.pattern,
             self.case_mode,
             self.is_pattern_lowercase,

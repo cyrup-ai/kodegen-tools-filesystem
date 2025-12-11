@@ -58,6 +58,10 @@ pub struct SearchContext {
     /// Client's working directory from ToolExecutionContext
     /// Used to resolve relative paths in ripgrep integration
     pub client_pwd: Option<PathBuf>,
+    
+    /// Pattern type detected during search (for filename search)
+    /// Set by file_search::execute(), read by session.rs for output
+    pub pattern_type: Option<crate::search::types::PatternMode>,
 }
 
 impl SearchContext {
@@ -82,6 +86,7 @@ impl SearchContext {
             is_error: false,
             error: None,
             client_pwd,
+            pattern_type: None,
         }
     }
 

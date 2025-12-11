@@ -5,6 +5,7 @@
 
 mod builder;
 pub(super) mod execute;
+pub(super) mod pattern;
 mod visitor;
 
 // Re-export the execute function for easier access from parent module

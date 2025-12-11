@@ -68,8 +68,23 @@ pub(super) fn configure_walker(
     hi_args: &super::super::rg::flags::hiargs::HiArgs,
 ) {
     log::debug!(
-        "configure_walker: hi_args.hidden = {}, setting walker.hidden({})",
-        hi_args.hidden,
+        "configure_walker: no_ignore_vcs={}, no_ignore_dot={}, no_ignore_parent={}, \
+         no_ignore_global={}, no_ignore_exclude={}, hidden={}",
+        hi_args.no_ignore_vcs,
+        hi_args.no_ignore_dot,
+        hi_args.no_ignore_parent,
+        hi_args.no_ignore_global,
+        hi_args.no_ignore_exclude,
+        hi_args.hidden
+    );
+    log::debug!(
+        "configure_walker: setting git_ignore({}), ignore({}), parents({}), \
+         git_global({}), git_exclude({}), hidden({})",
+        !hi_args.no_ignore_vcs,
+        !hi_args.no_ignore_dot,
+        !hi_args.no_ignore_parent,
+        !hi_args.no_ignore_vcs && !hi_args.no_ignore_global,
+        !hi_args.no_ignore_vcs && !hi_args.no_ignore_exclude,
         !hi_args.hidden
     );
     walker

@@ -390,7 +390,7 @@ impl Tool for ReadFileTool {
         } else {
             let read = lines_read.unwrap_or(0);
             format!(
-                "\x1b[36mRead file: {display_path}\x1b[0m\nContent: {read} lines · {} bytes · Use Content[1] for data",
+                "\x1b[36mRead file: {display_path}\x1b[0m\nContent: {read} lines · {} bytes",
                 content.len()
             )
         };

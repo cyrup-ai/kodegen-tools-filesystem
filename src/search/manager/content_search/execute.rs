@@ -1,6 +1,6 @@
 //! Main execute function for content search
 
-use super::super::super::types::{ReturnMode, SearchResult};
+use super::super::super::types::{PatternMode, ReturnMode, SearchResult};
 use super::ContentSearchBuilder;
 use ignore::WalkBuilder;
 use std::sync::Arc;
@@ -12,6 +12,27 @@ pub fn execute(
     root: &std::path::PathBuf,
     ctx: &mut super::super::context::SearchContext,
 ) {
+    // Detect pattern type for content search
+    // Content search uses ripgrep which always interprets patterns as regex
+    // unless literal_search (fixed_strings) is enabled
+    // Note: Glob is not applicable to content search, falls back to Regex
+    let pattern_type = match options.pattern_mode {
+        Some(PatternMode::Substring) => PatternMode::Substring,
+        Some(PatternMode::Glob) => {
+            log::warn!("Glob pattern mode not supported for content search, using Regex");
+            PatternMode::Regex
+        }
+        Some(PatternMode::Regex) => PatternMode::Regex,
+        None => {
+            if options.literal_search {
+                PatternMode::Substring
+            } else {
+                PatternMode::Regex
+            }
+        }
+    };
+    ctx.pattern_type = Some(pattern_type);
+
     // Build LowArgs from SearchSessionOptions
     use super::super::super::rg::flags::hiargs::HiArgs;
     use super::super::super::rg::flags::lowargs::{

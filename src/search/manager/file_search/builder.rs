@@ -1,6 +1,6 @@
 //! Parallel visitor builder for file search
 
-use super::visitor::FileSearchVisitor;
+use super::visitor::{CompiledPattern, FileSearchVisitor};
 use crate::search::manager::config::RESULT_BUFFER_SIZE;
 use crate::search::types::{CaseMode, SearchResult};
 use ignore::{ParallelVisitor, ParallelVisitorBuilder};
@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 
 /// Parallel visitor builder for file search
 pub(super) struct FileSearchBuilder {
-    pub(super) glob_pattern: Option<globset::GlobMatcher>,
+    pub(super) compiled_pattern: CompiledPattern,
     pub(super) pattern: String,
     pub(super) pattern_lower: String,
     pub(super) case_mode: CaseMode,
@@ -29,7 +29,7 @@ pub(super) struct FileSearchBuilder {
 impl<'s> ParallelVisitorBuilder<'s> for FileSearchBuilder {
     fn build(&mut self) -> Box<dyn ParallelVisitor + 's> {
         Box::new(FileSearchVisitor {
-            glob_pattern: self.glob_pattern.clone(),
+            compiled_pattern: self.compiled_pattern.clone(),
             pattern: self.pattern.clone(),
             pattern_lower: self.pattern_lower.clone(),
             case_mode: self.case_mode,

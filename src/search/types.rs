@@ -1,5 +1,5 @@
 // Re-export enums for internal use
-pub use kodegen_mcp_schema::filesystem::{SearchIn, ReturnMode, CaseMode, BoundaryMode, EngineChoice as Engine, BinaryMode, SortBy, SortDirection};
+pub use kodegen_mcp_schema::filesystem::{SearchIn, ReturnMode, CaseMode, BoundaryMode, EngineChoice as Engine, BinaryMode, SortBy, SortDirection, FsPatternMode as PatternMode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -40,6 +40,8 @@ pub struct SearchSessionOptions {
     pub timeout_ms: Option<u64>,
     pub early_termination: Option<bool>,
     pub literal_search: bool,
+    /// Optional pattern mode override from user
+    pub pattern_mode: Option<PatternMode>,
     /// Boundary mode for pattern matching (default: None)
     /// - None: Match pattern anywhere (substring matching)
     /// - `Some(BoundaryMode::Word)`: Match whole words only (\bpattern\b)

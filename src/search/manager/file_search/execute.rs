@@ -1,8 +1,10 @@
 //! Execute file search using walker with parallel directory traversal
 
 use super::builder::FileSearchBuilder;
+use super::pattern;
+use super::visitor::CompiledPattern;
 use crate::search::manager::config::DEFAULT_MAX_RESULTS;
-use crate::search::types::BoundaryMode;
+use crate::search::types::{BoundaryMode, PatternMode};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
@@ -18,24 +20,40 @@ pub fn execute(
     use ignore::WalkBuilder;
     use std::sync::atomic::Ordering;
 
-    // Only use glob matching if pattern contains actual glob metacharacters
-    // Otherwise, use substring matching for intuitive filename search behavior
-    let glob_pattern = if options.literal_search {
-        None
-    } else {
-        // Check for glob metacharacters: *, ?, [, {
-        let has_glob_chars = options.pattern.contains('*')
-            || options.pattern.contains('?')
-            || options.pattern.contains('[')
-            || options.pattern.contains('{');
+    // Detect pattern type using intelligent inference
+    // Priority: user override > literal_search > regex detection > glob detection > substring
+    let detected_pattern_type = pattern::detect(
+        &options.pattern,
+        options.literal_search,
+        options.pattern_mode,
+    );
 
-        if has_glob_chars {
-            globset::Glob::new(&options.pattern)
-                .ok()
-                .map(|g| g.compile_matcher())
-        } else {
-            None // Fall through to substring matching in visitor
+    // Store pattern type in context for output
+    ctx.pattern_type = Some(detected_pattern_type);
+
+    // Compile pattern based on detected type
+    let compiled_pattern = match detected_pattern_type {
+        PatternMode::Regex => {
+            match regex::Regex::new(&options.pattern) {
+                Ok(re) => CompiledPattern::Regex(re),
+                Err(e) => {
+                    log::warn!("Failed to compile regex '{}': {}, falling back to substring", options.pattern, e);
+                    ctx.pattern_type = Some(PatternMode::Substring);
+                    CompiledPattern::Substring
+                }
+            }
         }
+        PatternMode::Glob => {
+            match globset::Glob::new(&options.pattern) {
+                Ok(g) => CompiledPattern::Glob(g.compile_matcher()),
+                Err(e) => {
+                    log::warn!("Failed to compile glob '{}': {}, falling back to substring", options.pattern, e);
+                    ctx.pattern_type = Some(PatternMode::Substring);
+                    CompiledPattern::Substring
+                }
+            }
+        }
+        PatternMode::Substring => CompiledPattern::Substring,
     };
     let pattern_lower = options.pattern.to_lowercase();
 
@@ -48,6 +66,10 @@ pub fn execute(
     let type_changes = build_type_changes(options);
 
     // Build LowArgs for type filtering
+    log::debug!(
+        "file_search::execute: options.no_ignore = {}",
+        options.no_ignore
+    );
     let low_args = LowArgs {
         patterns: vec![PatternSource::Regexp(options.pattern.clone())],
         case: convert_case_mode(options.case_mode),
@@ -64,6 +86,12 @@ pub fn execute(
         no_ignore_dot: options.no_ignore,
         ..Default::default()
     };
+    log::debug!(
+        "file_search::execute: LowArgs no_ignore_vcs={}, no_ignore_dot={}, no_ignore_parent={}",
+        low_args.no_ignore_vcs,
+        low_args.no_ignore_dot,
+        low_args.no_ignore_parent
+    );
 
     // Build HiArgs for types
     // Pass client_pwd from SearchContext for correct working directory resolution
@@ -75,6 +103,12 @@ pub fn execute(
             return;
         }
     };
+    log::debug!(
+        "file_search::execute: HiArgs no_ignore_vcs={}, no_ignore_dot={}, no_ignore_parent={}",
+        hi_args.no_ignore_vcs,
+        hi_args.no_ignore_dot,
+        hi_args.no_ignore_parent
+    );
 
     // Build directory walker with gitignore support and parallel traversal
     let mut walker = WalkBuilder::new(root);
@@ -85,7 +119,7 @@ pub fn execute(
 
     // Build the parallel visitor
     let mut builder = FileSearchBuilder {
-        glob_pattern,
+        compiled_pattern,
         pattern: options.pattern.clone(),
         pattern_lower,
         case_mode: options.case_mode,

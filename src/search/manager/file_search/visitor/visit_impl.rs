@@ -1,6 +1,6 @@
 //! ParallelVisitor trait implementation for file search
 
-use super::FileSearchVisitor;
+use super::{CompiledPattern, FileSearchVisitor};
 use super::matching;
 use crate::search::types::{CaseMode, SearchResult, SearchResultType};
 use ignore::{DirEntry, ParallelVisitor};
@@ -8,6 +8,12 @@ use std::sync::atomic::Ordering;
 
 impl ParallelVisitor for FileSearchVisitor {
     fn visit(&mut self, entry: Result<DirEntry, ignore::Error>) -> ignore::WalkState {
+        // Debug: log every entry we receive
+        match &entry {
+            Ok(e) => log::debug!("FileSearchVisitor::visit: entry={}", e.path().display()),
+            Err(e) => log::debug!("FileSearchVisitor::visit: error={}", e),
+        }
+
         // Fast check - if another thread already found exact match, quit immediately
         if self.early_termination && self.early_term_triggered.load(Ordering::Acquire) {
             self.flush_buffer();
@@ -31,34 +37,50 @@ impl ParallelVisitor for FileSearchVisitor {
         let path = entry.path();
         let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
-        // Check if filename matches pattern
-        // Try glob pattern first, then fall back to substring or word boundary matching
-        let matches = if let Some(ref glob) = self.glob_pattern {
-            glob.is_match(file_name)
-        } else if self.word_boundary {
-            // Word boundary: pattern must be surrounded by word boundaries
-            // Boundaries are: '.', '-', '_', '/', or start/end of string
-            matching::matches_with_word_boundary(
-                file_name,
-                &self.pattern,
-                &self.pattern_lower,
-                self.case_mode,
-                self.is_pattern_lowercase,
-            )
-        } else {
-            // Substring match (current behavior)
-            let file_name_lower = file_name.to_lowercase();
-            match self.case_mode {
-                CaseMode::Insensitive => file_name_lower.contains(&self.pattern_lower),
-                CaseMode::Smart => {
-                    // Smart: case-insensitive if pattern is all lowercase
-                    if self.is_pattern_lowercase {
-                        file_name_lower.contains(&self.pattern_lower)
-                    } else {
-                        file_name.contains(&self.pattern)
+        let pattern_type = match &self.compiled_pattern {
+            CompiledPattern::Regex(_) => "regex",
+            CompiledPattern::Glob(_) => "glob",
+            CompiledPattern::Substring => "substring",
+        };
+        log::debug!(
+            "FileSearchVisitor: file_name='{}', pattern='{}', pattern_type={}, word_boundary={}",
+            file_name,
+            self.pattern,
+            pattern_type,
+            self.word_boundary
+        );
+
+        // Check if filename matches pattern based on compiled pattern type
+        let matches = match &self.compiled_pattern {
+            CompiledPattern::Regex(regex) => regex.is_match(file_name),
+            CompiledPattern::Glob(glob) => glob.is_match(file_name),
+            CompiledPattern::Substring => {
+                if self.word_boundary {
+                    // Word boundary: pattern must be surrounded by word boundaries
+                    // Boundaries are: '.', '-', '_', '/', or start/end of string
+                    matching::matches_with_word_boundary(
+                        file_name,
+                        &self.pattern,
+                        &self.pattern_lower,
+                        self.case_mode,
+                        self.is_pattern_lowercase,
+                    )
+                } else {
+                    // Substring match (current behavior)
+                    let file_name_lower = file_name.to_lowercase();
+                    match self.case_mode {
+                        CaseMode::Insensitive => file_name_lower.contains(&self.pattern_lower),
+                        CaseMode::Smart => {
+                            // Smart: case-insensitive if pattern is all lowercase
+                            if self.is_pattern_lowercase {
+                                file_name_lower.contains(&self.pattern_lower)
+                            } else {
+                                file_name.contains(&self.pattern)
+                            }
+                        }
+                        CaseMode::Sensitive => file_name.contains(&self.pattern),
                     }
                 }
-                CaseMode::Sensitive => file_name.contains(&self.pattern),
             }
         };
 

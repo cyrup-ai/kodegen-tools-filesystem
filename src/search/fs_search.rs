@@ -204,8 +204,18 @@ impl Tool for FsSearchTool {
             }
         };
 
-        // Extract summary from typed output
-        let summary = output.output.clone();
+        // Generate summary from output fields
+        let summary = if output.completed {
+            format!(
+                "\x1b[32m[Complete]\x1b[0m {} matches in {} files",
+                output.match_count, output.files_searched
+            )
+        } else {
+            format!(
+                "\x1b[33m[Progress]\x1b[0m {} matches in {} files so far",
+                output.match_count, output.files_searched
+            )
+        };
 
         Ok(ToolResponse::new(summary, output))
     }

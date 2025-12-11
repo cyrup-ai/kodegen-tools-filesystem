@@ -12,7 +12,7 @@ use tokio::task::JoinHandle;
 
 use super::manager::context::SearchContext;
 use super::manager::{content_search, file_search};
-use super::types::{SearchSessionOptions, SearchIn, CaseMode, BoundaryMode, SearchResult, SearchResultType};
+use super::types::{SearchSessionOptions, SearchIn, CaseMode, BoundaryMode, SearchResult, SearchResultType, PatternMode};
 
 /// Internal snapshot data for registry access
 #[derive(Debug, Clone)]
@@ -40,6 +40,9 @@ struct SearchState {
     error_count: usize,
     errors: Vec<String>,
 
+    // Pattern type (detected or user-specified)
+    pattern_type: Option<PatternMode>,
+
     // Status
     completed: bool,
     success: bool,
@@ -61,6 +64,7 @@ impl SearchState {
             files_searched: 0,
             error_count: 0,
             errors: Vec::new(),
+            pattern_type: None,
             completed: false,
             success: false,
             exit_code: None,
@@ -211,6 +215,7 @@ impl SearchSession {
             sort_by: args.sort_by,
             sort_direction: args.sort_direction,
             encoding: args.encoding,
+            pattern_mode: args.pattern_mode,
         };
 
         // Spawn background search task
@@ -239,6 +244,7 @@ impl SearchSession {
                 let is_complete = ctx.is_complete;
                 let is_error = ctx.is_error;
                 let error = ctx.error.clone();
+                let pattern_type = ctx.pattern_type;
 
                 (
                     results,
@@ -249,6 +255,7 @@ impl SearchSession {
                     is_complete,
                     is_error,
                     error,
+                    pattern_type,
                 )
             })
             .await;
@@ -264,6 +271,7 @@ impl SearchSession {
                     is_complete,
                     is_error,
                     error,
+                    pattern_type,
                 )) => {
                     let mut state = state_clone.lock().await;
 
@@ -273,6 +281,7 @@ impl SearchSession {
                     state.files_searched = total_files;
                     state.error_count = error_count;
                     state.errors = errors.iter().map(|e| format!("{:?}", e)).collect();
+                    state.pattern_type = pattern_type;
                     state.completed = is_complete;
                     state.success = !is_error;
                     state.exit_code = Some(if is_error { 1 } else { 0 });
@@ -294,7 +303,6 @@ impl SearchSession {
 
             return Ok(FsSearchOutput {
                 search: Some(self.search_id),
-                output: "\x1b[36m[Search] Background search started\x1b[0m\n• Use action=READ to check progress".to_string(),
                 pattern,
                 path,
                 results: Vec::new(),
@@ -308,6 +316,7 @@ impl SearchSession {
                 success: true,
                 exit_code: None,
                 error: None,
+                pattern_type: None,
             });
         }
 
@@ -327,10 +336,6 @@ impl SearchSession {
                 // Timeout - return partial results
                 Ok(FsSearchOutput {
                     search: Some(self.search_id),
-                    output: format!(
-                        "\x1b[33m[Progress] Found {} matches in {} files so far\x1b[0m\n\n\x1b[36m[Search] Still running\x1b[0m\n• Use action=READ for more results",
-                        state.match_count, state.files_searched
-                    ),
                     pattern: state.pattern.clone(),
                     path: state.path.clone(),
                     results,
@@ -344,16 +349,13 @@ impl SearchSession {
                     success: true,
                     exit_code: None,
                     error: None,
+                    pattern_type: state.pattern_type,
                 })
             }
             Ok(Ok(_)) => {
                 // Completed successfully
                 Ok(FsSearchOutput {
                     search: Some(self.search_id),
-                    output: format!(
-                        "\x1b[32m[Complete] Search completed\x1b[0m\n• {} matches in {} files",
-                        state.match_count, state.files_searched
-                    ),
                     pattern: state.pattern.clone(),
                     path: state.path.clone(),
                     results,
@@ -367,13 +369,13 @@ impl SearchSession {
                     success: state.success,
                     exit_code: state.exit_code,
                     error: state.error.clone(),
+                    pattern_type: state.pattern_type,
                 })
             }
             Ok(Err(e)) => {
                 // Task panicked
                 Ok(FsSearchOutput {
                     search: Some(self.search_id),
-                    output: format!("\x1b[31m[Error] Search failed\x1b[0m\n• {}", e),
                     pattern: state.pattern.clone(),
                     path: state.path.clone(),
                     results: Vec::new(),
@@ -387,6 +389,7 @@ impl SearchSession {
                     success: false,
                     exit_code: Some(1),
                     error: Some(format!("{}", e)),
+                    pattern_type: None,
                 })
             }
         }
@@ -402,17 +405,6 @@ impl SearchSession {
 
         Ok(FsSearchOutput {
             search: Some(self.search_id),
-            output: if state.completed {
-                format!(
-                    "\x1b[32m[Complete] Search completed\x1b[0m\n• {} matches in {} files",
-                    state.match_count, state.files_searched
-                )
-            } else {
-                format!(
-                    "\x1b[33m[Progress] Search in progress\x1b[0m\n• {} matches in {} files so far",
-                    state.match_count, state.files_searched
-                )
-            },
             pattern: state.pattern.clone(),
             path: state.path.clone(),
             results,
@@ -426,6 +418,7 @@ impl SearchSession {
             success: state.success,
             exit_code: state.exit_code,
             error: state.error.clone(),
+            pattern_type: state.pattern_type,
         })
     }
 

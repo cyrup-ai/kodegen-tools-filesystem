@@ -1,5 +1,6 @@
 //! Pattern matching logic for file search
 
+use super::CompiledPattern;
 use crate::search::types::CaseMode;
 
 /// Check if pattern matches with word boundaries
@@ -69,9 +70,10 @@ pub(super) fn matches_with_word_boundary(
 ///
 /// Returns true only when:
 /// - Glob pattern has no wildcards and matches filename exactly, OR
+/// - Regex pattern matches the entire filename, OR
 /// - Literal pattern equals filename exactly (respecting `case_mode`)
 pub(super) fn is_exact_match(
-    glob_pattern: &Option<globset::GlobMatcher>,
+    compiled_pattern: &CompiledPattern,
     pattern: &str,
     case_mode: CaseMode,
     is_pattern_lowercase: bool,
@@ -80,49 +82,57 @@ pub(super) fn is_exact_match(
 ) -> bool {
     // Word boundary mode: must match entire filename
     if word_boundary {
-        if let Some(glob) = glob_pattern {
-            return glob.is_match(file_name);
-        }
-        return match case_mode {
-            CaseMode::Insensitive => file_name.eq_ignore_ascii_case(pattern),
-            CaseMode::Smart => {
-                if is_pattern_lowercase {
-                    file_name.eq_ignore_ascii_case(pattern)
-                } else {
-                    file_name == pattern
+        return match compiled_pattern {
+            CompiledPattern::Regex(re) => re.is_match(file_name),
+            CompiledPattern::Glob(glob) => glob.is_match(file_name),
+            CompiledPattern::Substring => match case_mode {
+                CaseMode::Insensitive => file_name.eq_ignore_ascii_case(pattern),
+                CaseMode::Smart => {
+                    if is_pattern_lowercase {
+                        file_name.eq_ignore_ascii_case(pattern)
+                    } else {
+                        file_name == pattern
+                    }
                 }
-            }
-            CaseMode::Sensitive => file_name == pattern,
+                CaseMode::Sensitive => file_name == pattern,
+            },
         };
     }
 
-    // Original logic: check for exact match in non-word-boundary mode
-    if let Some(glob) = glob_pattern {
-        // Check if glob pattern has no wildcards
-        let has_wildcards = pattern.contains('*')
-            || pattern.contains('?')
-            || pattern.contains('[');
-
-        // Not exact if pattern contains wildcards
-        if has_wildcards {
-            return false;
+    // Check for exact match in non-word-boundary mode
+    match compiled_pattern {
+        CompiledPattern::Regex(re) => {
+            // For regex, check if pattern anchors suggest exact match
+            let is_anchored = pattern.starts_with('^') && pattern.ends_with('$');
+            is_anchored && re.is_match(file_name)
         }
+        CompiledPattern::Glob(glob) => {
+            // Check if glob pattern has no wildcards
+            let has_wildcards =
+                pattern.contains('*') || pattern.contains('?') || pattern.contains('[');
 
-        // Exact match if no wildcards and pattern matches
-        glob.is_match(file_name)
-    } else {
-        // For literal/substring matching, exact means equality
-        match case_mode {
-            CaseMode::Insensitive => file_name.eq_ignore_ascii_case(pattern),
-            CaseMode::Smart => {
-                // Smart: case-insensitive if pattern is all lowercase
-                if is_pattern_lowercase {
-                    file_name.eq_ignore_ascii_case(pattern)
-                } else {
-                    file_name == pattern
-                }
+            // Not exact if pattern contains wildcards
+            if has_wildcards {
+                return false;
             }
-            CaseMode::Sensitive => file_name == pattern,
+
+            // Exact match if no wildcards and pattern matches
+            glob.is_match(file_name)
+        }
+        CompiledPattern::Substring => {
+            // For literal/substring matching, exact means equality
+            match case_mode {
+                CaseMode::Insensitive => file_name.eq_ignore_ascii_case(pattern),
+                CaseMode::Smart => {
+                    // Smart: case-insensitive if pattern is all lowercase
+                    if is_pattern_lowercase {
+                        file_name.eq_ignore_ascii_case(pattern)
+                    } else {
+                        file_name == pattern
+                    }
+                }
+                CaseMode::Sensitive => file_name == pattern,
+            }
         }
     }
 }

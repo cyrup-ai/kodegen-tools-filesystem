@@ -112,10 +112,8 @@ impl Tool for ReadMultipleFilesTool {
         let files_read = results.iter().filter(|r| r.success).count();
         let files_failed = files_requested - files_read;
 
-        // Build header line (existing format for backward compatibility)
-        let mut summary = format!(
-            "\x1b[36mRead multiple files (parallel)\x1b[0m\nResults: {files_read} successful · {files_failed} failed of {files_requested} total\n\n\n"
-        );
+        // File list only - no header
+        let mut summary = String::new();
 
         // Sort results: failures first, then successes (both alphabetically by path)
         let mut sorted_results = results.clone();
