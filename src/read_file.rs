@@ -265,7 +265,21 @@ impl ReadFileTool {
         const FETCH_TIMEOUT_MS: u64 = 30000;
 
         let fetch_operation = async {
-            let resp = reqwest::get(url)
+            // Create HTTP client with proper User-Agent header
+            // This prevents 403 Forbidden errors from modern websites (AWS, CloudFront, etc.)
+            // that block requests without User-Agent to prevent bot scraping
+            let client = reqwest::Client::builder()
+                .user_agent(concat!(
+                    "kodegen-filesystem/",
+                    env!("CARGO_PKG_VERSION")
+                ))
+                .timeout(Duration::from_secs(30))
+                .build()
+                .map_err(|e| McpError::Network(format!("Failed to build HTTP client: {}", e)))?;
+
+            let resp = client
+                .get(url)
+                .send()
                 .await
                 .map_err(|e| McpError::Network(e.to_string()))?;
 
