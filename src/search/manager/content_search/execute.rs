@@ -6,6 +6,31 @@ use ignore::WalkBuilder;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+/// Test if a pattern can be compiled as a valid regex
+///
+/// Returns true if the pattern compiles successfully and can be used for regex search.
+/// Returns false if compilation fails or the pattern is malformed.
+fn can_compile_as_regex(pattern: &str) -> bool {
+    use grep::regex::RegexMatcherBuilder;
+    
+    let mut builder = RegexMatcherBuilder::new();
+    builder
+        .multi_line(true)
+        .unicode(true)
+        .octal(false);
+    
+    match builder.build(pattern) {
+        Ok(_) => {
+            log::debug!("Pattern '{}' compiled successfully as regex", pattern);
+            true
+        }
+        Err(e) => {
+            log::debug!("Pattern '{}' failed regex compilation: {}", pattern, e);
+            false
+        }
+    }
+}
+
 /// Execute content search using grep libraries with parallel directory traversal
 pub fn execute(
     options: &super::super::super::types::SearchSessionOptions,
@@ -16,7 +41,7 @@ pub fn execute(
     // Content search uses ripgrep which always interprets patterns as regex
     // unless literal_search (fixed_strings) is enabled
     // Note: Glob is not applicable to content search, falls back to Regex
-    let pattern_type = match options.pattern_mode {
+    let mut pattern_type = match options.pattern_mode {
         Some(PatternMode::Substring) => PatternMode::Substring,
         Some(PatternMode::Glob) => {
             log::warn!("Glob pattern mode not supported for content search, using Regex");
@@ -27,10 +52,28 @@ pub fn execute(
             if options.literal_search {
                 PatternMode::Substring
             } else {
-                PatternMode::Regex
+                PatternMode::Regex  // Default inferred type
             }
         }
     };
+
+    // If type was INFERRED as Regex (not explicitly set), validate it
+    let was_inferred = options.pattern_mode.is_none() && !options.literal_search;
+    let use_literal_fallback = if matches!(pattern_type, PatternMode::Regex) && was_inferred
+        && !can_compile_as_regex(&options.pattern)
+    {
+        log::warn!(
+            "Pattern '{}' failed regex compilation. Automatically switching to literal search mode. \
+             To force regex mode, explicitly set pattern_mode='regex' with properly escaped pattern.",
+            options.pattern
+        );
+        pattern_type = PatternMode::Substring;
+        true
+    } else {
+        false
+    };
+
+    // Update context with actual type used
     ctx.pattern_type = Some(pattern_type);
 
     // Build LowArgs from SearchSessionOptions
@@ -95,7 +138,7 @@ pub fn execute(
             BoundaryMode::Word => RgBoundaryMode::Word,
             BoundaryMode::Line => RgBoundaryMode::Line,
         }),
-        fixed_strings: options.literal_search,
+        fixed_strings: options.literal_search || use_literal_fallback,
         context,
         max_count: if ctx.return_only == ReturnMode::Paths {
             Some(1) // Limit to 1 match per file for Paths mode (optimization)
